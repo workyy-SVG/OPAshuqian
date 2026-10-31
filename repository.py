@@ -16,7 +16,7 @@ class BusinessError(ValueError):
 
 
 class Repository:
-    def __init__(self, settings=None):
+    def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or Settings.from_env()
 
     @contextmanager
@@ -38,11 +38,15 @@ class Repository:
         finally:
             db.close()
 
-    def initialize(self):
+    def initialize(self) -> None:
+        from services.migration_service import migrate
         self.settings.runtime_dir.mkdir(parents=True, exist_ok=True)
         with self.connect() as db:
             db.execute("PRAGMA journal_mode=WAL")
-            db.executescript((ROOT / "schema.sql").read_text(encoding="utf-8"))
+            try:
+                migrate(db, self.settings.db_path, self.settings.runtime_dir)
+            except ValueError as exc:
+                raise BusinessError(str(exc), 'migration_failed') from exc
 
     def all(self, sql, params=()):
         with self.connect() as db:
@@ -52,10 +56,10 @@ class Repository:
         rows = self.all(sql, params)
         return rows[0] if rows else None
 
-    def products(self):
+    def products(self) -> list[dict]:
         return self.all("SELECT * FROM product_versions ORDER BY sku,version,id")
 
-    def add_product(self, sku, version, brand_code=BRAND_CODE):
+    def add_product(self, sku: str, version: str, brand_code: str = BRAND_CODE) -> int:
         if not sku.strip() or not version.strip():
             raise BusinessError("SKU 和产品版本不能为空。")
         if max(len(sku), len(version)) > 80:

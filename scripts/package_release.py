@@ -7,7 +7,7 @@ from config import ROOT
 
 TOP = ["app.py", "config.py", "repository.py", "schema.sql", "requirements.txt", "requirements-lock.txt",
        "README.md", "run.cmd", "Dockerfile", "compose.yaml", ".dockerignore", ".python-version", ".gitignore", ".gitattributes"]
-DIRECTORIES = ["services", "views", "scripts", "tests", "samples", "docs", ".github"]
+DIRECTORIES = ["services", "views", "scripts", "tests", "samples", "docs", ".github", "migrations", "prompts"]
 
 
 def package_release(output_dir=None):
@@ -17,7 +17,7 @@ def package_release(output_dir=None):
     paths = [ROOT / p for p in TOP if (ROOT / p).is_file()]
     for directory in DIRECTORIES:
         paths.extend(p for p in (ROOT / directory).rglob("*") if p.is_file()
-                     and p.suffix in (".py", ".md", ".csv", ".yml", ".yaml") and "__pycache__" not in p.parts)
+                     and p.suffix in (".py", ".md", ".csv", ".yml", ".yaml", ".sql", ".txt", ".json") and "__pycache__" not in p.parts)
     paths.extend(ROOT / ".streamlit" / name for name in ("config.toml", "secrets.example.toml"))
     with zipfile.ZipFile(output, "x", zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(set(paths)):

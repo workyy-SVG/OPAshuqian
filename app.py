@@ -1,12 +1,14 @@
 import streamlit as st
 from config import BRAND_NAME
 from repository import Repository
+from config import Settings
+from services.bootstrap_service import get_repository, cached_products, database_token
 from views import product_view, quality_view, content_view, impact_view
 from views.guidance import apply_theme, workspace_header
 
 st.set_page_config(page_title="黔品智营 · 产品与内容协同", page_icon="🌿", layout="wide")
-repo = Repository()
-repo.initialize()
+settings = Settings.from_env()
+repo = get_repository(str(settings.runtime_dir), str(settings.db_path))
 apply_theme()
 if 'pending_navigation' in st.session_state:
     st.session_state['navigation'] = st.session_state.pop('pending_navigation')
@@ -18,7 +20,7 @@ with st.sidebar:
     page = st.radio("工作空间", ["产品资料", "数据核对", "内容工作台", "变更追踪"], key="navigation")
     st.divider()
     st.caption(BRAND_NAME)
-    products = repo.products()
+    products = cached_products(str(settings.db_path), database_token(repo), repo)
     product_map = {p["id"]: p for p in products}
     if products:
         next_product = st.session_state.pop("next_product", None)

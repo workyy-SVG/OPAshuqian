@@ -9,6 +9,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from config import BRAND_CODE, FIELDS, MAX_UPLOAD_BYTES
 from repository import BusinessError, now
+from services.unit_service import normalize_weight
 
 COLUMNS = ["sku", "product_version", "field_key", "raw_value", "context_key",
            "source_label", "source_locator", "effective_from"]
@@ -23,13 +24,10 @@ def normalize_value(field, raw):
     if field not in FIELDS:
         raise BusinessError("无法识别的字段名。")
     if field == "net_weight_g":
-        match = re.fullmatch(r"(\d+(?:\.\d+)?)\s*(kg|g|千克|公斤|克)?", value, re.I)
-        if not match:
-            raise BusinessError("净含量请填写正数及 g 或 kg 单位。")
-        result = Decimal(match[1]) * (1000 if (match[2] or "g").lower() in ("kg", "千克", "公斤") else 1)
-        if result <= 0 or result > 1000000000:
-            raise BusinessError("净含量必须大于 0，且在合理范围内。")
-        return format(result.normalize(), "f")
+        try:
+            return normalize_weight(value)
+        except ValueError as exc:
+            raise BusinessError(str(exc)) from exc
     if field == "price_cent":
         match = re.fullmatch(r"(?:¥|￥)?\s*(\d+(?:\.\d{1,2})?)\s*元?", value)
         if not match:
