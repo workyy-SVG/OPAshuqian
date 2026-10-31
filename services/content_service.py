@@ -13,7 +13,8 @@ def template_result(snapshot):
     name = values["product_name"]
     pieces = [f"{name}，净含量 {values['net_weight_g']} 克。"]
     if "price_cent" in values:
-        pieces.append(f"{snapshot['context']} 渠道价格 {Decimal(values['price_cent']) / 100:.2f} 元。")
+        channel = {'retail': '零售', 'wholesale': '批发'}.get(snapshot['context'], snapshot['context'])
+        pieces.append(f"{channel}价格 {Decimal(values['price_cent']) / 100:.2f} 元。")
     for field, label in (("ingredients_text", "配料"), ("usage_text", "使用方法"), ("storage_text", "储存说明")):
         if field in values:
             pieces.append(f"{label}：{values[field]}。")

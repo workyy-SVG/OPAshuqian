@@ -2,10 +2,14 @@ import streamlit as st
 from config import BRAND_NAME
 from repository import Repository
 from views import product_view, quality_view, content_view, impact_view
+from views.guidance import apply_theme, workspace_header
 
 st.set_page_config(page_title="黔品智营 · 产品与内容协同", page_icon="🌿", layout="wide")
 repo = Repository()
 repo.initialize()
+apply_theme()
+if 'pending_navigation' in st.session_state:
+    st.session_state['navigation'] = st.session_state.pop('pending_navigation')
 
 with st.sidebar:
     st.title("黔品智营")
@@ -28,13 +32,15 @@ with st.sidebar:
         product_id = None
         st.info("导入样例或新增一个产品开始。")
     operator = st.text_input("操作人 / 审核人", value="", key="operator", placeholder="填写实际操作人")
+    st.checkbox('显示模块使用说明', value=True, key='show_module_guide')
+    if not operator.strip():
+        st.caption('开始确认或审核前，记得填写操作人。')
     st.caption("本地单品牌原型 · 演示资料均为拟制")
 
 if "notice" in st.session_state:
     st.success(st.session_state.pop("notice"))
 
-st.caption("黔品智营 / " + page)
-st.title(page)
+workspace_header(page, product_map.get(product_id))
 {
     "产品资料": product_view.render,
     "数据核对": quality_view.render,

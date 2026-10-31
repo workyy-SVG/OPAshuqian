@@ -3,7 +3,8 @@ import io
 import streamlit as st
 from config import ROOT, FIELDS
 from services.import_service import preview_import, commit_import, add_manual
-from views.common import action, fact_table, STATES
+from views.common import action, fact_table, STATES, display_context
+from views.guidance import next_button
 
 
 def render(repo, product_id, operator):
@@ -17,6 +18,13 @@ def render(repo, product_id, operator):
         with col2:
             st.download_button("下载空白模板", (ROOT / "samples/template.csv").read_bytes(), "黔品智营资料模板.csv", "text/csv")
             st.download_button("下载拟制样例", (ROOT / "samples/products.csv").read_bytes(), "拟制样例.csv", "text/csv")
+            import zipfile
+            pack = io.BytesIO()
+            with zipfile.ZipFile(pack, 'w', zipfile.ZIP_DEFLATED) as bundle:
+                for path in (ROOT / 'samples/walkthrough').glob('*.csv'):
+                    bundle.writestr(path.name, path.read_bytes())
+                bundle.writestr('详细使用说明.md', (ROOT / 'docs/USER_GUIDE.md').read_bytes())
+            st.download_button('下载分步体验资料包', pack.getvalue(), '黔品智营分步体验.zip', 'application/zip')
             if st.button("导入拟制演示样例", key="import_sample"):
                 preview = preview_import((ROOT / "samples/products.csv").read_bytes())
                 ok, result = action(lambda: commit_import(repo, preview, "拟制演示样例.csv"), "拟制样例已导入，请到数据核对页处理净含量冲突。")
@@ -53,7 +61,10 @@ def render(repo, product_id, operator):
             with st.form("manual_observation"):
                 field = st.selectbox("字段", list(FIELDS), format_func=FIELDS.get)
                 raw = st.text_area("来源原文", help="重量可填200g或0.2kg；金额填写元，例如12.00。")
-                context = st.text_input("适用范围", value="general", help="价格填retail等明确渠道，其余字段填general。")
+                scope = st.selectbox('适用范围', ['general', 'retail', 'wholesale'], format_func=display_context,
+                                     help='名称、净含量和说明选通用资料；价格选零售或批发。')
+                custom_scope = st.text_input('其他价格渠道（可留空）', help='仅当价格属于其他渠道时填写，例如门店A。')
+                context = custom_scope.strip() if field == 'price_cent' and custom_scope.strip() else scope
                 source = st.text_input("来源说明", placeholder="例如包装标签、已核对价目表")
                 effective = st.text_input("适用日期（可留空）", placeholder="YYYY-MM-DD")
                 reason = st.text_input("补录原因")
@@ -86,6 +97,7 @@ def render(repo, product_id, operator):
         else:
             st.info("尚无导入记录。可先导入拟制演示样例。")
     if product_id:
+        next_button('下一步：去核对并确认资料', '数据核对', 'product:quality')
         st.subheader("当前已确认资料")
         fact_table(repo, product_id)
 

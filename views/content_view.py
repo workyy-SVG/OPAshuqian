@@ -6,20 +6,23 @@ from repository import BusinessError
 from services.fact_service import build_snapshot, current_basis
 from services.content_service import (generate_content, edit_content, submit_for_review, approve_content, export_content)
 from services.llm_client import DeepSeekClient, QwenClient
-from views.common import STATES, action, display_value, model_configs
+from views.common import STATES, action, display_value, model_configs, display_context, available_channels
+from views.guidance import next_button
+from services.text_check_service import text_issues
 
 
 def render(repo, product_id, operator):
     st.write("只使用已确认资料组织内容。每份内容保留输入快照，逐句审核后才能导出。")
     if not product_id:
         st.info("请先导入产品资料并确认名称、净含量。")
+        next_button('去准备产品资料', '产品资料', 'content:import')
         return
     create_tab, history_tab = st.tabs(["生成内容", "审核与历史"])
     with create_tab:
         left, right = st.columns([3, 2])
         with left:
             content_type = st.radio("内容类型", list(CONTENT_TYPES), format_func=CONTENT_TYPES.get, horizontal=True)
-            context = st.text_input("价格渠道", value="retail", help="例如retail、wholesale，与资料的渠道名完全一致。")
+            context = st.selectbox('价格渠道', available_channels(repo, product_id), format_func=display_context, key='generate_channel')
             include_price = st.checkbox("加入该渠道价格", value=True)
             optional = st.multiselect("加入已确认的说明字段", ["ingredients_text", "usage_text", "storage_text"],
                                       default=["ingredients_text", "usage_text", "storage_text"], format_func=FIELDS.get)
@@ -47,12 +50,14 @@ def render(repo, product_id, operator):
             if basis:
                 for fact in basis["snapshot"]["facts"]:
                     st.write(f"**{FIELDS[fact['field']]}**：{display_value(fact['field'], fact['value'])}")
-                    st.caption(f"{fact['context']} · 字段修订 #{fact['fact_revision_id']}")
+                    st.caption(f"{display_context(fact['context'])} · 字段修订 #{fact['fact_revision_id']}")
                 if basis["missing"]:
                     st.warning("请先补齐或处理冲突：" + "、".join(FIELDS[f] for f in basis["missing"]))
                 if basis["conflicts"]:
                     st.warning("所选字段存在未解决冲突，请到数据核对页处理。")
         disabled = not basis or bool(basis["missing"]) or (mode != "template" and not cfg.api_key)
+        if basis and basis['missing']:
+            next_button('去补齐或核对资料', '数据核对', 'content:quality')
         if st.button("生成一份草稿", type="primary", disabled=disabled, key="generate_draft"):
             request_key = uuid.uuid4().hex
             st.session_state["last_request_key"] = request_key
@@ -65,6 +70,15 @@ def render(repo, product_id, operator):
                 st.rerun()
     with history_tab:
         rows = repo.all("SELECT * FROM content_revisions WHERE product_id=? ORDER BY id DESC", (product_id,))
+        show_history = st.checkbox('包含历史修订', value=False, key='include_content_history')
+        if not show_history:
+            seen = set()
+            latest = []
+            for item in rows:
+                if item['logical_id'] not in seen:
+                    latest.append(item)
+                    seen.add(item['logical_id'])
+            rows = latest
         if rows:
             ids = [r["id"] for r in rows]
             focused = st.session_state.pop("focused_content", None)
@@ -87,14 +101,22 @@ def render(repo, product_id, operator):
 
 def render_content(repo, row, operator):
     content_id = row["id"]
-    st.caption(f"内容 #{content_id} · 修订 R{row['revision']} · {STATES[row['state']]} · {'模板模式' if row['mode'] == 'template' else row['mode']} · {row['context']}")
+    modes = {'template': '模板模式', 'deepseek': 'DeepSeek', 'qwen': '通义千问', 'manual': '人工编辑'}
+    st.caption(f"内容 #{content_id} · 修订 R{row['revision']} · {STATES[row['state']]} · {modes.get(row['mode'],row['mode'])} · {display_context(row['context'])}")
     st.subheader(row["title"])
     st.text(row["body"])
     with repo.connect() as db:
         basis = current_basis(db, json.loads(row["snapshot_json"]))
     valid = not basis["missing"] and basis["snapshot_hash"] == row["snapshot_hash"]
-    if not valid or row["state"] == "stale":
+    body_issues = text_issues(row['title'], row['body'], basis['snapshot']) if not basis['missing'] else []
+    for issue in body_issues:
+        st.error(issue)
+    if body_issues:
+        valid = False
+        st.caption('请在下方“编辑为新修订”中修正正文后重新审核。')
+    if basis['missing'] or basis['snapshot_hash'] != row['snapshot_hash'] or row["state"] == "stale":
         st.warning("这份内容的依据已变化或存在冲突。请到变更追踪页生成新修订或复查后重绑依据。")
+        next_button('去查看变化与处理建议', '变更追踪', f'content:impact:{content_id}')
     with st.expander("输入快照、来源与审核记录"):
         snapshot = json.loads(row["snapshot_json"])
         st.json(snapshot)

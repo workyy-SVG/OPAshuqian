@@ -19,6 +19,15 @@ def display_value(field, value):
     return value
 
 
+def display_context(value):
+    return {'general': '通用资料', 'retail': '零售', 'wholesale': '批发'}.get(value, value)
+
+
+def available_channels(repo, product_id):
+    rows = repo.all("SELECT DISTINCT context FROM observations WHERE product_id=? AND field='price_cent' AND state!='error'", (product_id,))
+    return list(dict.fromkeys(['retail', 'wholesale'] + [r['context'] for r in rows if r['context'] != 'general']))
+
+
 def action(callback, success="操作已保存。"):
     try:
         result = callback()
@@ -61,7 +70,7 @@ def fact_table(repo, product_id):
         FROM fact_revisions f JOIN observations o ON o.id=f.source_observation_id
         WHERE f.product_id=? AND f.state='current' ORDER BY f.field,f.context""", (product_id,))
     if rows:
-        st.dataframe([{"字段": FIELDS.get(r["field"], r["field"]), "范围": r["context"],
+        st.dataframe([{"字段": FIELDS.get(r["field"], r["field"]), "范围": display_context(r["context"]),
                        "确认值": display_value(r["field"], r["value"]), "修订编号": r["id"],
                        "来源": r["source_label"], "来源位置": r["source_locator"], "CSV行号": r["row_no"]} for r in rows], hide_index=True, width="stretch")
     else:

@@ -97,3 +97,23 @@ def test_reuse_body_rebinds_new_revision_and_requires_review(repo):
     new = repo.one("SELECT * FROM content_revisions WHERE id=?", (new_id,))
     assert new["state"] == "draft" and new["snapshot_hash"] != row["snapshot_hash"]
     assert repo.one("SELECT snapshot_hash FROM content_revisions WHERE id=?", (cid,))["snapshot_hash"] == row["snapshot_hash"]
+
+
+def test_worklist_closes_only_after_latest_revision_is_reviewed(repo):
+    from services.impact_service import impact_worklist
+    from services.content_service import approve_content
+    p = confirmed(repo)
+    cid = ready(repo, p)
+    old = repo.one('SELECT * FROM content_revisions WHERE id=?', (cid,))
+    change_price(repo, p)
+    assert impact_worklist(repo, p)[0]['resolution'] == 'needs_update'
+    new = edit_content(repo, cid, old['title'], old['body'].replace('12.00', '14.00'), '甲', '更新价格', rebind=True)
+    assert impact_worklist(repo, p)[0]['resolution'] == 'needs_review'
+    submit_for_review(repo, new, '甲')
+    row = repo.one('SELECT * FROM content_revisions WHERE id=?', (new,))
+    approve_content(repo, new, '甲', row['snapshot_hash'], '核对新价')
+    items = impact_worklist(repo, p)
+    assert len(items) == 1 and items[0]['resolution'] == 'resolved'
+    assert repo.one('SELECT state FROM content_revisions WHERE id=?', (cid,))['state'] == 'stale'
+    change_price(repo, p, '16.00')
+    assert impact_worklist(repo, p)[0]['resolution'] == 'needs_update'
