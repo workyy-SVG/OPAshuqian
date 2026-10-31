@@ -1,0 +1,4 @@
+﻿sku,product_version,field_key,raw_value,context_key,source_label,source_locator,effective_from
+TRYERR,V1,price_cent,十二元,retail,拟制错误体验资料,第1条中文金额,2026-10-31
+,V1,product_name,漏填SKU的拟制商品,general,拟制错误体验资料,第2条缺失SKU,2026-10-31
+TRYERR,V1,net_weight_g,0g,general,拟制错误体验资料,第3条零净含量,2026-10-31

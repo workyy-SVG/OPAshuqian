@@ -1,0 +1,15 @@
+﻿sku,product_version,field_key,raw_value,context_key,source_label,source_locator,effective_from
+TRY001,V1,product_name,体验辣椒酱（拟制）,general,拟制体验包装A,A2名称,2026-10-31
+TRY001,V1,net_weight_g,200g,general,拟制体验包装A,A2净含量,2026-10-31
+TRY001,V1,net_weight_g,0.2kg,general,拟制体验仓储表B,B2净含量,2026-10-31
+TRY001,V1,net_weight_g,250g,general,拟制体验误录表C,C2净含量,2026-10-31
+TRY001,V1,price_cent,12.00,retail,拟制体验零售价表A,A2价格,2026-10-31
+TRY001,V1,ingredients_text,辣椒、菜籽油、食用盐,general,拟制体验包装A,A2配料,2026-10-31
+TRY001,V1,usage_text,可按个人喜好拌饭或佐餐,general,拟制体验包装A,A2食用说明,2026-10-31
+TRY001,V1,storage_text,请按包装标示条件保存,general,拟制体验包装A,A2储存说明,2026-10-31
+TRY002,V1,product_name,体验刺梨饮（拟制）,general,拟制体验商品表D,D2名称,2026-10-31
+TRY002,V1,net_weight_g,300g,general,拟制体验商品表D,D2净含量,2026-10-31
+TRY002,V1,price_cent,18.00,retail,拟制体验商品表D,D2价格,2026-10-31
+TRY001,V2,product_name,体验辣椒酱新包装（拟制）,general,拟制体验新包装表E,E2名称,2026-10-31
+TRY001,V2,net_weight_g,250g,general,拟制体验新包装表E,E2净含量,2026-10-31
+TRY001,V2,price_cent,16.00,retail,拟制体验新包装表E,E2价格,2026-10-31
