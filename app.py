@@ -3,10 +3,12 @@ from config import BRAND_NAME
 from repository import Repository
 from config import Settings
 from services.bootstrap_service import get_repository, cached_products, database_token
+from views.access_view import authorize
 from views import product_view, quality_view, content_view, impact_view
 from views.guidance import apply_theme, workspace_header
 
 st.set_page_config(page_title="黔品智营 · 产品与内容协同", page_icon="🌿", layout="wide")
+authenticated_user = authorize()
 settings = Settings.from_env()
 repo = get_repository(str(settings.runtime_dir), str(settings.db_path))
 apply_theme()
@@ -33,7 +35,11 @@ with st.sidebar:
     else:
         product_id = None
         st.info("导入样例或新增一个产品开始。")
-    operator = st.text_input("操作人 / 审核人", value="", key="operator", placeholder="填写实际操作人")
+    if authenticated_user:
+        operator = authenticated_user
+        st.caption('本次操作人 / 审核人：' + operator)
+    else:
+        operator = st.text_input("操作人 / 审核人", value="", key="operator", placeholder="填写实际操作人")
     st.checkbox('显示模块使用说明', value=True, key='show_module_guide')
     if not operator.strip():
         st.caption('开始确认或审核前，记得填写操作人。')

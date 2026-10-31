@@ -1,3 +1,6 @@
+from typing import Any
+
+
 def list_impacts(repo, product_id=None, event_id=None):
     clauses, params = ["e.old_fact_id IS NOT NULL"], []
     if product_id is not None:
@@ -14,7 +17,7 @@ def list_impacts(repo, product_id=None, event_id=None):
         JOIN fact_revisions old ON old.id=e.old_fact_id
         LEFT JOIN fact_revisions new ON new.id=e.new_fact_id WHERE """ + " AND ".join(clauses) +
         " ORDER BY e.id DESC,c.id DESC", params)
-    result = {}
+    result: dict[int, dict[str, Any]] = {}
     for row in rows:
         item = result.setdefault(row["id"], {**row, "triggers": []})
         item["triggers"].append({k: row[k] for k in ("event_id", "changed_field", "changed_context", "old_value", "new_value", "change_reason")})
@@ -26,7 +29,7 @@ def impact_worklist(repo, product_id):
     import json
     from services.fact_service import current_basis
     from services.text_check_service import text_issues
-    groups = {}
+    groups: dict[str, list[dict[str, Any]]] = {}
     for old in list_impacts(repo, product_id):
         groups.setdefault(old['logical_id'], []).append(old)
     result = []

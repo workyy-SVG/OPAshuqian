@@ -48,7 +48,10 @@ class CompatibleModelClient:
         self.config = config
         self.post = post or requests.post
         self.sleep = sleep or time.sleep
-        self.policy = policy or RetryPolicy.from_env()
+        try:
+            self.policy = policy or RetryPolicy.from_env()
+        except ValueError as exc:
+            raise ModelError('重试配置无效，请检查本机参数。', 'invalid_retry_config', 0) from exc
 
     def extra_payload(self):
         return {}

@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 from config import CONTENT_TYPES, FIELDS
 from repository import BusinessError, now
 from services.quality_service import pending_groups
+from services.audit_service import audited
 
 
 def canonical(snapshot):
@@ -88,6 +89,7 @@ def _change(db, product_id, field, context, old_id, new_id, operator, reason):
                    AND state!='archived'""", (old_id,))
 
 
+@audited('fact.confirm')
 def confirm_fact(repo, product_id, observation_id, expected_old_id, operator, reason):
     _check_operator(operator, reason)
     with repo.connect(write=True) as db:
@@ -126,6 +128,7 @@ def confirm_fact(repo, product_id, observation_id, expected_old_id, operator, re
         return new_id
 
 
+@audited('fact.withdraw')
 def withdraw_fact(repo, product_id, field, context, expected_old_id, operator, reason):
     _check_operator(operator, reason)
     with repo.connect(write=True) as db:

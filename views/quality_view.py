@@ -4,6 +4,7 @@ from services.quality_service import detect_issues, exclude_observation, reassig
 from services.fact_service import confirm_fact
 from views.common import action, fact_table, display_value, display_context
 from views.guidance import next_button
+from services import query_service as queries
 
 
 def render(repo, product_id, operator):
@@ -46,7 +47,7 @@ def render(repo, product_id, operator):
                 chosen = st.selectbox("选择候选编号", list(evidence), key="choice:" + key,
                     format_func=lambda i: f"{evidence[i]['raw']} · {evidence[i]['source_label']} · #{i}")
                 decision = st.radio("处理方式", ["确认采用", "排除误录", "重新分配对象"], horizontal=True, key="decision:" + key)
-                products = repo.products()
+                products = queries.products(repo)
                 target = st.selectbox("重新分配的目标产品（仅对应操作使用）", [p["id"] for p in products],
                     format_func=lambda i: next(f"{p['sku']} · {p['version']}" for p in products if p["id"] == i), key="target:" + key)
                 reason = st.text_input("核对依据 / 处理原因", key="reason:" + key, placeholder="说明查阅了什么依据、为什么采纳或排除")
@@ -69,5 +70,4 @@ def render(repo, product_id, operator):
         st.success('名称和净含量已确认。生成含价格的内容前，还需确认对应渠道价格。')
         next_button('下一步：去生成内容', '内容工作台', 'quality:generate')
     with st.expander("候选处理审计"):
-        st.dataframe(repo.all("""SELECT a.* FROM observation_actions a JOIN observations o ON o.id=a.observation_id
-            WHERE o.product_id=? OR a.old_product_id=? ORDER BY a.id DESC""", (product_id, product_id)), hide_index=True, width="stretch")
+        st.dataframe(queries.observation_actions(repo, product_id), hide_index=True, width="stretch")

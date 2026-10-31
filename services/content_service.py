@@ -6,6 +6,7 @@ from repository import BusinessError, now
 from services.fact_service import _snapshot, canonical, current_basis, snapshot_hash
 from services.llm_client import PROMPT_VERSION, ModelError, validate_result
 from services.text_check_service import assert_text_matches
+from services.audit_service import audited
 
 
 def template_result(snapshot):
@@ -78,6 +79,7 @@ def save_draft(repo, job_id, result, mode, attempts=0, usage=None, logical_id=No
         return content_id
 
 
+@audited('content.generate')
 def generate_content(repo, product_id, request_key, context="retail", content_type="product_intro", include_price=True,
                      mode="template", client=None, selected_fields=None, logical_id=None):
     created = create_generation(repo, product_id, request_key, context, content_type, include_price, mode,
@@ -154,6 +156,7 @@ def submit_for_review(repo, content_id, operator):
                    (content_id, operator.strip(), "submitted", row["snapshot_hash"], "提交人工逐句核对", now()))
 
 
+@audited('content.approve')
 def approve_content(repo, content_id, operator, basis_hash, reason):
     if not operator.strip() or not reason.strip():
         raise BusinessError("请填写审核人和审核说明。")
@@ -169,6 +172,7 @@ def approve_content(repo, content_id, operator, basis_hash, reason):
                    (content_id, operator.strip(), "approved", basis_hash, reason.strip(), now()))
 
 
+@audited('content.export')
 def export_content(repo, content_id, operator):
     if not operator.strip():
         raise BusinessError("请填写导出操作人。")

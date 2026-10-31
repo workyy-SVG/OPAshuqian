@@ -76,6 +76,9 @@ def migrate(db: sqlite3.Connection, db_path: Path, runtime_dir: Path, migrations
             expected = baseline_hash if number == 1 else hashlib.sha256(files[number].read_bytes()).hexdigest()
             if checksum != expected:
                 raise ValueError('已应用迁移文件发生变化，请使用原文件或新增迁移。')
+        applied = [r[0] for r in db.execute('SELECT version FROM schema_migrations ORDER BY version')]
+        if applied != list(range(1, version + 1)):
+            raise ValueError('数据库版本与迁移历史不一致，请检查备份。')
         for number in range(version + 1, LATEST_SCHEMA_VERSION + 1):
             path = files[number]
             execute_sql(db, path.read_text(encoding='utf-8'))

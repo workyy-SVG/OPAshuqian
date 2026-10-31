@@ -1,5 +1,7 @@
 """SQLite access and transaction boundary shared by services."""
 import sqlite3
+import time
+import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from config import ROOT, Settings, BRAND_CODE
@@ -21,6 +23,9 @@ class Repository:
 
     @contextmanager
     def connect(self, write=False):
+        from services.audit_service import audit_event
+        started = time.monotonic()
+        request_id = uuid.uuid4().hex
         self.settings.db_path.parent.mkdir(parents=True, exist_ok=True)
         db = sqlite3.connect(self.settings.db_path, isolation_level=None, timeout=10)
         db.row_factory = sqlite3.Row
@@ -31,9 +36,14 @@ class Repository:
             yield db
             if write:
                 db.execute("COMMIT")
+                audit_event(self.settings.runtime_dir, 'transaction', 'committed', request_id=request_id,
+                            duration_ms=round((time.monotonic()-started)*1000, 2))
         except Exception:
             if db.in_transaction:
                 db.execute("ROLLBACK")
+            if write:
+                audit_event(self.settings.runtime_dir, 'transaction', 'rolled_back', request_id=request_id,
+                            duration_ms=round((time.monotonic()-started)*1000, 2))
             raise
         finally:
             db.close()

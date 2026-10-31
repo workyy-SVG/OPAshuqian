@@ -7,6 +7,7 @@ from services.impact_service import impact_worklist
 from services.content_service import generate_content, edit_content
 from views.common import STATES, action, display_value, fact_table, display_context
 from views.guidance import next_button, navigate
+from services import query_service as queries
 
 
 def open_review(content_id):
@@ -89,5 +90,5 @@ def render(repo, product_id, operator):
                         if ok:
                             st.rerun()
     with st.expander('完整字段修订与变更事件'):
-        st.dataframe(repo.all('SELECT * FROM fact_revisions WHERE product_id=? ORDER BY id DESC', (product_id,)), hide_index=True, width='stretch')
-        st.dataframe(repo.all('SELECT * FROM change_events WHERE product_id=? ORDER BY id DESC', (product_id,)), hide_index=True, width='stretch')
+        st.dataframe(queries.fact_history(repo, product_id), hide_index=True, width='stretch')
+        st.dataframe(queries.change_history(repo, product_id), hide_index=True, width='stretch')

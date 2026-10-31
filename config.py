@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parent
 BRAND_CODE = "DEMO"
 BRAND_NAME = "黔味小铺（拟制演示品牌）"
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+MAX_IMPORT_ROWS = 20000
 FIELDS = {
     "product_name": "产品名称", "net_weight_g": "净含量（克）",
     "price_cent": "价格", "ingredients_text": "配料原文",

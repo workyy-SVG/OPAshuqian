@@ -6,7 +6,8 @@ import zipfile
 from config import ROOT
 
 TOP = ["app.py", "config.py", "repository.py", "schema.sql", "requirements.txt", "requirements-lock.txt",
-       "README.md", "run.cmd", "Dockerfile", "compose.yaml", ".dockerignore", ".python-version", ".gitignore", ".gitattributes"]
+       "README.md", "run.cmd", "Dockerfile", "compose.yaml", ".dockerignore", ".python-version", ".gitignore", ".gitattributes",
+       "requirements-dev.in", "requirements-dev-lock.txt", "mypy.ini", "pytest.ini"]
 DIRECTORIES = ["services", "views", "scripts", "tests", "samples", "docs", ".github", "migrations", "prompts"]
 
 

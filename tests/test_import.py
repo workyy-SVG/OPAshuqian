@@ -38,3 +38,12 @@ def test_encoding_headers_and_preview_tamper(repo):
     preview["rows"][0]["normalized"] = "篡改"
     commit_import(repo, preview)
     assert repo.one("SELECT normalized FROM observations WHERE row_no=2")["normalized"] == "山野辣椒酱"
+
+
+def test_streaming_row_limit_is_enforced(monkeypatch):
+    import services.import_service as importer
+    monkeypatch.setattr(importer,'MAX_IMPORT_ROWS',1)
+    data=(ROOT/'samples/products.csv').read_bytes()
+    with pytest.raises(BusinessError) as error:
+        preview_import(data)
+    assert error.value.code == 'row_limit'

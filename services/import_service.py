@@ -4,10 +4,11 @@ import io
 import json
 import re
 import uuid
+from typing import Any
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from config import BRAND_CODE, FIELDS, MAX_UPLOAD_BYTES
+from config import BRAND_CODE, FIELDS, MAX_UPLOAD_BYTES, MAX_IMPORT_ROWS
 from repository import BusinessError, now
 from services.unit_service import normalize_weight
 
@@ -86,12 +87,8 @@ def preview_import(file_bytes, encoding="utf-8-sig"):
     if encoding not in ("utf-8-sig", "gb18030"):
         raise BusinessError("不支持的编码。")
     try:
-        text = file_bytes.decode(encoding)
-    except UnicodeDecodeError as exc:
-        raise BusinessError("无法按所选编码读取。请明确选择 GB18030 后重新预览。", "encoding") from exc
-    csv.field_size_limit(MAX_UPLOAD_BYTES)
-    try:
-        reader = csv.DictReader(io.StringIO(text, newline=""), strict=True)
+        stream = io.TextIOWrapper(io.BytesIO(file_bytes), encoding=encoding, newline='')
+        reader = csv.DictReader(stream, strict=True)
         headers = reader.fieldnames or []
         errors = []
         missing = set(COLUMNS) - set(headers)
@@ -99,9 +96,11 @@ def preview_import(file_bytes, encoding="utf-8-sig"):
             errors.append("缺少列：" + "、".join(sorted(missing)))
         if len(set(headers)) != len(headers):
             errors.append("表头存在重复列")
-        rows = []
+        rows: list[dict[str, Any]] = []
         if not errors:
             for row in reader:
+                if len(rows) >= MAX_IMPORT_ROWS:
+                    raise BusinessError(f'文件超过{MAX_IMPORT_ROWS}条记录，请分批导入。', 'row_limit')
                 if None in row:
                     errors.append(f"第 {reader.line_num} 行的列数超过表头")
                     continue
@@ -109,8 +108,13 @@ def preview_import(file_bytes, encoding="utf-8-sig"):
                 rows.append(row)
             if not rows:
                 errors.append("CSV 没有数据行")
+    except UnicodeDecodeError as exc:
+        raise BusinessError("无法按所选编码读取。请明确选择 GB18030 后重新预览。", "encoding") from exc
     except csv.Error as exc:
         raise BusinessError("CSV 格式错误，请检查引号、分隔符或超长字段。", "csv_format") from exc
+    finally:
+        if 'stream' in locals():
+            stream.close()
     return {"sha256": hashlib.sha256(file_bytes).hexdigest(), "file_bytes": file_bytes,
             "encoding": encoding, "headers": headers, "errors": errors,
             "rows": normalize_rows(rows) if not errors else []}

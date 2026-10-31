@@ -8,7 +8,8 @@ from services.content_service import (generate_content, edit_content, submit_for
 from services.llm_client import DeepSeekClient, QwenClient
 from views.common import STATES, action, display_value, model_configs, display_context, available_channels
 from views.guidance import next_button
-from services.text_check_service import text_issues
+from services.text_check_service import text_findings
+from services import query_service as queries
 
 
 def render(repo, product_id, operator):
@@ -37,7 +38,7 @@ def render(repo, product_id, operator):
             else:
                 st.caption(f"模型：{cfg.name} · 输出仍需人工核对，不自动视为事实正确。")
         # Include only available optional facts; absent optional fields are never invented.
-        current = repo.all("SELECT field FROM fact_revisions WHERE product_id=? AND state='current'", (product_id,))
+        current = queries.current_facts(repo, product_id)
         selected = [f for f in optional if any(r["field"] == f for r in current)]
         try:
             basis = build_snapshot(repo, product_id, context, content_type, include_price,
@@ -69,16 +70,8 @@ def render(repo, product_id, operator):
                 st.session_state["focused_content"] = result["content_id"]
                 st.rerun()
     with history_tab:
-        rows = repo.all("SELECT * FROM content_revisions WHERE product_id=? ORDER BY id DESC", (product_id,))
         show_history = st.checkbox('包含历史修订', value=False, key='include_content_history')
-        if not show_history:
-            seen = set()
-            latest = []
-            for item in rows:
-                if item['logical_id'] not in seen:
-                    latest.append(item)
-                    seen.add(item['logical_id'])
-            rows = latest
+        rows = queries.content_history(repo, product_id, show_history)
         if rows:
             ids = [r["id"] for r in rows]
             focused = st.session_state.pop("focused_content", None)
@@ -93,7 +86,7 @@ def render(repo, product_id, operator):
         else:
             st.info("尚无内容。确认必需资料后生成第一份草稿。")
         with st.expander("生成任务与失败记录"):
-            jobs = repo.all("SELECT id,request_key,state,attempts,model,prompt_version,error_code,usage_json,created_at,finished_at FROM generation_jobs WHERE product_id=? ORDER BY id DESC", (product_id,))
+            jobs = queries.generation_jobs(repo, product_id)
             st.dataframe(jobs, hide_index=True, width="stretch")
             if any(j["state"] == "running" for j in jobs):
                 st.warning("存在运行中任务，可能正在处理或因程序中断遗留。请先核查，确需重试时返回“生成内容”再次明确点击；原任务保留。")
@@ -105,12 +98,15 @@ def render_content(repo, row, operator):
     st.caption(f"内容 #{content_id} · 修订 R{row['revision']} · {STATES[row['state']]} · {modes.get(row['mode'],row['mode'])} · {display_context(row['context'])}")
     st.subheader(row["title"])
     st.text(row["body"])
-    with repo.connect() as db:
-        basis = current_basis(db, json.loads(row["snapshot_json"]))
+    basis = queries.content_basis(repo, row)
     valid = not basis["missing"] and basis["snapshot_hash"] == row["snapshot_hash"]
-    body_issues = text_issues(row['title'], row['body'], basis['snapshot']) if not basis['missing'] else []
+    body_issues = text_findings(row['title'], row['body'], basis['snapshot']) if not basis['missing'] else []
     for issue in body_issues:
-        st.error(issue)
+        st.error(issue['message'])
+        if issue['sentence']:
+            from html import escape
+            section = '标题' if issue['section'] == 'title' else '正文'
+            st.markdown(f"**定位到{section}：** <mark>{escape(issue['sentence'])}</mark>", unsafe_allow_html=True)
     if body_issues:
         valid = False
         st.caption('请在下方“编辑为新修订”中修正正文后重新审核。')
@@ -121,11 +117,9 @@ def render_content(repo, row, operator):
         snapshot = json.loads(row["snapshot_json"])
         st.json(snapshot)
         st.caption("快照 SHA-256：" + row["snapshot_hash"])
-        st.dataframe(repo.all("""SELECT f.id,f.field,f.context,f.value,f.state,o.source_label,o.source_locator,o.row_no,o.raw
-            FROM content_dependencies d JOIN fact_revisions f ON f.id=d.fact_revision_id
-            JOIN observations o ON o.id=f.source_observation_id WHERE d.content_revision_id=?""", (content_id,)), hide_index=True, width="stretch")
-        st.dataframe(repo.all("SELECT * FROM review_records WHERE content_id=? ORDER BY id", (content_id,)), hide_index=True, width="stretch")
-        st.dataframe(repo.all("SELECT id,operator,basis_hash,created_at FROM export_records WHERE content_id=? ORDER BY id", (content_id,)), hide_index=True, width="stretch")
+        st.dataframe(queries.content_evidence(repo, content_id), hide_index=True, width="stretch")
+        st.dataframe(queries.content_reviews(repo, content_id), hide_index=True, width="stretch")
+        st.dataframe(queries.content_exports(repo, content_id), hide_index=True, width="stretch")
     if row["state"] == "draft":
         if st.button("提交人工审核", key=f"submit:{content_id}", disabled=not valid):
             ok, _ = action(lambda: submit_for_review(repo, content_id, operator))
@@ -143,8 +137,13 @@ def render_content(repo, row, operator):
                     if ok:
                         st.rerun()
     if row["state"] == "ready" and valid:
+        from views.access_view import download_guard
+        guard = download_guard()
+        def checked_export():
+            guard()
+            return export_content(repo, content_id, operator)['text']
         # Deferred execution checks the database at the actual download request.
-        st.download_button("校验依据并下载 TXT", data=lambda: export_content(repo, content_id, operator)["text"],
+        st.download_button("校验依据并下载 TXT", data=checked_export,
                            file_name=f"qianpin-{content_id}-R{row['revision']}.txt", mime="text/plain; charset=utf-8",
                            key=f"export:{content_id}", disabled=not operator.strip())
     with st.expander("编辑为新修订"):

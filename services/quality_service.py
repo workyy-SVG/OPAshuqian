@@ -1,10 +1,11 @@
 from config import FIELDS
 from repository import BusinessError, now
+from typing import Any
 
 
 def pending_groups(db, product_id):
     rows = db.execute("SELECT * FROM observations WHERE product_id=? AND state='pending' ORDER BY field,context,id", (product_id,)).fetchall()
-    groups = {}
+    groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
     for row in rows:
         groups.setdefault((row["field"], row["context"]), []).append(dict(row))
     return groups
@@ -15,7 +16,7 @@ def detect_issues(repo, product_id):
         groups = pending_groups(db, product_id)
         current = {(r["field"], r["context"]): dict(r) for r in db.execute(
             "SELECT * FROM fact_revisions WHERE product_id=? AND state='current'", (product_id,))}
-        issues = []
+        issues: list[dict[str, Any]] = []
         for field in ("product_name", "net_weight_g"):
             if (field, "general") not in current:
                 issues.append({"issue_id": f"{product_id}:{field}:general:missing", "type": "missing",

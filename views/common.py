@@ -3,6 +3,7 @@ from decimal import Decimal
 import streamlit as st
 from config import FIELDS, ModelConfig, QwenConfig
 from repository import BusinessError
+from services import query_service as queries
 
 STATES = {"pending": "待确认", "adopted": "已采纳", "excluded": "已排除", "duplicate": "重复证据",
           "error": "格式错误", "current": "当前确认", "superseded": "已替代", "withdrawn": "已撤回",
@@ -24,8 +25,7 @@ def display_context(value):
 
 
 def available_channels(repo, product_id):
-    rows = repo.all("SELECT DISTINCT context FROM observations WHERE product_id=? AND field='price_cent' AND state!='error'", (product_id,))
-    return list(dict.fromkeys(['retail', 'wholesale'] + [r['context'] for r in rows if r['context'] != 'general']))
+    return queries.channels(repo, product_id)
 
 
 def action(callback, success="操作已保存。"):
@@ -68,9 +68,7 @@ def model_config():
 
 
 def fact_table(repo, product_id):
-    rows = repo.all("""SELECT f.*,o.raw,o.source_label,o.source_locator,o.row_no,o.effective_from
-        FROM fact_revisions f JOIN observations o ON o.id=f.source_observation_id
-        WHERE f.product_id=? AND f.state='current' ORDER BY f.field,f.context""", (product_id,))
+    rows = queries.current_facts(repo, product_id)
     if rows:
         st.dataframe([{"字段": FIELDS.get(r["field"], r["field"]), "范围": display_context(r["context"]),
                        "确认值": display_value(r["field"], r["value"]), "修订编号": r["id"],

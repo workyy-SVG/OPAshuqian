@@ -5,6 +5,7 @@ from config import ROOT, FIELDS
 from services.import_service import preview_import, commit_import, add_manual
 from views.common import action, fact_table, STATES, display_context
 from views.guidance import next_button
+from services import query_service as queries
 
 
 def render(repo, product_id, operator):
@@ -13,7 +14,7 @@ def render(repo, product_id, operator):
     with tabs[0]:
         col1, col2 = st.columns([3, 1])
         with col1:
-            upload = st.file_uploader("上传长表 CSV", type=["csv"], help="最大5MB；每行一条来源陈述，SKU按字符串处理。")
+            upload = st.file_uploader("上传长表 CSV", type=["csv"], help="最大5MB、最多20000条；每行一条来源陈述，SKU按字符串处理。")
             encoding = st.selectbox("文件编码", ["utf-8-sig", "gb18030"], format_func=lambda v: "UTF-8（推荐）" if v == "utf-8-sig" else "GB18030（手动选择）")
         with col2:
             st.download_button("下载空白模板", (ROOT / "samples/template.csv").read_bytes(), "黔品智营资料模板.csv", "text/csv")
@@ -73,27 +74,37 @@ def render(repo, product_id, operator):
                     if ok:
                         st.rerun()
     with tabs[2]:
-        sources = repo.all("""SELECT s.id,s.original_name,s.sha256,s.created_at,COUNT(o.id) AS total,
-            SUM(o.state='error') AS errors FROM sources s LEFT JOIN observations o ON o.source_id=s.id GROUP BY s.id ORDER BY s.id DESC""")
+        sources = queries.sources(repo)
         if sources:
             st.dataframe(sources, hide_index=True, width="stretch")
             source_id = st.selectbox("查看批次", [s["id"] for s in sources], format_func=lambda i: f"批次 {i}")
-            observations = repo.all("SELECT * FROM observations WHERE source_id=? ORDER BY row_no", (source_id,))
+            observations = queries.source_observations(repo, source_id)
             st.dataframe([{**r, "state": STATES.get(r["state"], r["state"])} for r in observations], hide_index=True, width="stretch")
-            source = repo.one("SELECT * FROM sources WHERE id=?", (source_id,))
+            source = queries.source_record(repo, source_id)
             from pathlib import Path
             path = Path(source["stored_path"])
             if not path.is_absolute():
                 path = repo.settings.runtime_dir / path
             if path.is_file():
-                st.download_button("下载本批原始资料", path.read_bytes(), f"source-{source_id}.csv", "text/csv")
+                from views.access_view import download_guard
+                guard = download_guard()
+                def read_source():
+                    guard()
+                    return path.read_bytes()
+                st.download_button("下载本批原始资料", read_source, f"source-{source_id}.csv", "text/csv")
             errors = [r for r in observations if r["state"] == "error"]
             if errors:
                 buffer = io.StringIO(newline="")
                 writer = csv.DictWriter(buffer, ["row_no", "field", "raw", "error"])
                 writer.writeheader()
                 writer.writerows({k: r[k] for k in writer.fieldnames} for r in errors)
-                st.download_button("下载错误行清单", buffer.getvalue().encode("utf-8-sig"), f"errors-{source_id}.csv", "text/csv")
+                from views.access_view import download_guard
+                error_guard = download_guard()
+                payload = buffer.getvalue().encode('utf-8-sig')
+                def read_errors():
+                    error_guard()
+                    return payload
+                st.download_button("下载错误行清单", read_errors, f"errors-{source_id}.csv", "text/csv")
         else:
             st.info("尚无导入记录。可先导入拟制演示样例。")
     if product_id:
