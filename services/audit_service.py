@@ -10,6 +10,19 @@ import re
 import threading
 import time
 import uuid
+from contextvars import ContextVar
+from contextlib import contextmanager
+
+model_audit_context: ContextVar[tuple[Path, int] | None] = ContextVar('model_audit_context', default=None)
+
+
+@contextmanager
+def model_audit_scope(runtime_dir: Path, job_id: int):
+    token = model_audit_context.set((runtime_dir, job_id))
+    try:
+        yield
+    finally:
+        model_audit_context.reset(token)
 
 _lock = threading.Lock()
 _loggers: dict[str, logging.Logger] = {}

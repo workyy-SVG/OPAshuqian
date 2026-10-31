@@ -58,3 +58,20 @@ def test_future_and_incompatible_schema_fail_closed(repo):
         db.execute('PRAGMA user_version=999')
     with pytest.raises(BusinessError, match='版本'):
         repo.initialize()
+
+
+def test_legacy_missing_unique_constraint_is_not_stamped(tmp_path):
+    from config import Settings
+    path=tmp_path/'invalid-legacy.sqlite3'
+    db=sqlite3.connect(path)
+    try:
+        db.executescript((ROOT/'schema.sql').read_text(encoding='utf-8'))
+        db.execute('DROP INDEX uq_fact_current')
+    finally:
+        db.close()
+    repo=Repository(Settings(tmp_path,path))
+    with pytest.raises(BusinessError,match='唯一约束'):
+        repo.initialize()
+    with repo.connect() as db:
+        assert db.execute('PRAGMA user_version').fetchone()[0]==0
+        assert not db.execute("SELECT 1 FROM sqlite_master WHERE name='schema_migrations'").fetchone()

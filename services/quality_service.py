@@ -1,10 +1,12 @@
 from config import FIELDS
 from repository import BusinessError, now
 from typing import Any
+from services.date_service import today_iso
 
 
 def pending_groups(db, product_id):
-    rows = db.execute("SELECT * FROM observations WHERE product_id=? AND state='pending' ORDER BY field,context,id", (product_id,)).fetchall()
+    rows = db.execute("""SELECT * FROM observations WHERE product_id=? AND state='pending'
+        AND (effective_from='' OR effective_from<=?) ORDER BY field,context,id""", (product_id, today_iso())).fetchall()
     groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
     for row in rows:
         groups.setdefault((row["field"], row["context"]), []).append(dict(row))

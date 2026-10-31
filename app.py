@@ -1,6 +1,6 @@
 import streamlit as st
 from config import BRAND_NAME
-from repository import Repository
+from repository import Repository, BusinessError
 from config import Settings
 from services.bootstrap_service import get_repository, cached_products, database_token
 from views.access_view import authorize
@@ -10,7 +10,11 @@ from views.guidance import apply_theme, workspace_header
 st.set_page_config(page_title="黔品智营 · 产品与内容协同", page_icon="🌿", layout="wide")
 authenticated_user = authorize()
 settings = Settings.from_env()
-repo = get_repository(str(settings.runtime_dir), str(settings.db_path))
+try:
+    repo = get_repository(str(settings.runtime_dir), str(settings.db_path))
+except BusinessError as error:
+    st.error(str(error))
+    st.stop()
 apply_theme()
 if 'pending_navigation' in st.session_state:
     st.session_state['navigation'] = st.session_state.pop('pending_navigation')

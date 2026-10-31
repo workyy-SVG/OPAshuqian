@@ -6,7 +6,7 @@ from repository import BusinessError, now
 from services.fact_service import _snapshot, canonical, current_basis, snapshot_hash
 from services.llm_client import PROMPT_VERSION, ModelError, validate_result
 from services.text_check_service import assert_text_matches
-from services.audit_service import audited
+from services.audit_service import audited, model_audit_scope
 
 
 def template_result(snapshot):
@@ -93,7 +93,8 @@ def generate_content(repo, product_id, request_key, context="retail", content_ty
         if mode == "template":
             output = {"result": template_result(snapshot), "attempts": 0, "usage": {}}
         elif client:
-            output = client.generate_json(snapshot, PROMPT_VERSION)
+            with model_audit_scope(repo.settings.runtime_dir, job['id']):
+                output = client.generate_json(snapshot, PROMPT_VERSION)
         else:
             raise ModelError("请先配置模型。", "missing_api_key", 0)
         content_id = save_draft(repo, job["id"], output["result"], mode, output["attempts"], output["usage"], logical_id)

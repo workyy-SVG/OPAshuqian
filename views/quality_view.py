@@ -14,6 +14,14 @@ def render(repo, product_id, operator):
         next_button('去导入产品资料', '产品资料', 'quality:import')
         return
     issues = detect_issues(repo, product_id)
+    dated = queries.dated_candidates(repo, product_id)
+    if dated:
+        future_count = sum(r['availability']=='future' for r in dated)
+        with st.expander(f"适用日期提醒：{len(dated)-future_count}条可核对，{future_count}条尚未到期"):
+            st.caption('到期后自动出现在可核对候选中，仍需你人工确认才会生效；未来候选不阻止当前有效资料的使用。')
+            st.dataframe([{'字段': FIELDS.get(r['field'],r['field']), '原文': r['raw'], '适用日期': r['effective_from'],
+                           '状态': '尚未到期' if r['availability']=='future' else '已到期，待人工确认', '来源': r['source_label']} for r in dated],
+                         hide_index=True, width='stretch')
     counts = [sum(i["type"] == kind for i in issues) for kind in ("missing", "conflict", "pending")]
     for col, label, count in zip(st.columns(3), ("必需信息未确认", "存在冲突的字段", "待确认字段组"), counts):
         col.metric(label, count)

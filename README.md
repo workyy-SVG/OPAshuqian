@@ -1,8 +1,10 @@
 # 黔品智营
 
-面向地方特色食品小微品牌的产品资料核对与内容协同工具。按实施手册实现 Python 3.13、Streamlit、SQLite 本地单体应用，支持 DeepSeek 及无需密钥的模板模式。
+面向地方特色食品小微品牌的产品资料核对与内容协同工具。按实施手册实现 Python 3.13、Streamlit、SQLite 本地单体应用，支持DeepSeek、通义千问及无需密钥的模板模式。
 
-**当前状态：已完成界面与易用性优化，39项本地测试通过。四个模块均内置三步上手和常见问题，支持流程快捷导航、中文渠道、最新修订筛选和变更处理状态。保留DeepSeek与通义千问双模型，真实API调用仍需本机配置密钥后单独验收。**
+**当前状态：按技术优化清单完成迁移、缓存、登录保护、日志、查询分层、单位校验、提示词版本与带哈希构建。69项本地测试通过，核心覆盖率92.37%，静态检查通过；Windows、Linux、macOS及Docker检查已恢复成功。真实模型调用与实际公网HTTPS部署仍需单独验收。**
+
+逐项处理结果见[18项清单实施记录](docs/CHECKLIST_IMPLEMENTATION.md)，认证配置和升级恢复见[部署说明](docs/DEPLOYMENT.md)。PostgreSQL迁移与开放多品牌入驻保留为按需路线图。
 
 本轮还修复了旧价格正文可误绑新依据的问题：正文的明确名称、净含量与价格在提交审核、通过审核和导出时重新校验。详见[优化记录](docs/OPTIMIZATION.md)。先前首版的Windows/Linux CI、独立环境复现与备份恢复记录保留在验收文档中。
 
@@ -23,7 +25,7 @@ Windows PowerShell 在项目根目录依次运行：
 
 ```powershell
 py -3.13 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements-lock.txt
+.\.venv\Scripts\python.exe -m pip install --require-hashes --only-binary=:all: -r requirements-lock.txt
 .\.venv\Scripts\python.exe -m scripts.init_db
 .\.venv\Scripts\python.exe -m streamlit run app.py --server.address=127.0.0.1
 ```
@@ -35,7 +37,7 @@ py -3.13 -m venv .venv
 ```powershell
 uv python install 3.13
 uv venv --python 3.13 .venv
-uv pip install --python .venv/Scripts/python.exe -r requirements-lock.txt
+uv pip install --python .venv/Scripts/python.exe --require-hashes --only-binary :all: -r requirements-lock.txt
 ```
 
 Linux / macOS 使用 `python3.13 -m venv .venv`，后续解释器路径改为 `.venv/bin/python`。本机验证平台为 Windows；[Windows 与 Linux CI 已通过](https://github.com/workyy-SVG/OPAshuqian/actions/runs/41188485804)，macOS 尚未验证。
@@ -82,14 +84,16 @@ name = "qwen-plus"
 .\.venv\Scripts\python.exe -m scripts.check_model 1 --provider qwen --confirm-live
 ```
 
-401 / 402 等配置与余额错误不会自动重试；连接超时、429 和部分 5xx 最多额外重试一次。任务记录模型、提示词版本、次数、用量与脱敏错误码。崩溃遗留的运行中任务由用户核查后明确新建请求，不自动重复计费。
+401 / 402等配置与余额错误不会自动重试；默认连接超时、429和部分5xx最多额外重试一次，采用指数退避与抖动。429优先尊重Retry-After，超过最大等待则停止，不提前重试。QIANPIN_RETRY_ATTEMPTS（1至5）、QIANPIN_RETRY_BASE_DELAY与QIANPIN_RETRY_MAX_DELAY（最多30秒）可在部署环境中调整。任务记录模型、提示词版本、次数、用量与脱敏错误码。提示词由prompts中的版本文件和哈希清单管理。崩溃遗留任务由用户核查后明确重试。
 
 ## 数据、测试与备份
 
 默认数据库为 `runtime/qianpin.sqlite3`。原文件存放 `runtime/sources`，导出及审计文件存放 `runtime/exports`。原文件以哈希命名，数据库内记录相对路径，便于迁移。初始化可重复执行，不清空旧数据。`QIANPIN_RUNTIME_DIR` 和 `QIANPIN_DB_PATH` 可用于隔离演示库；默认路径按项目文件定位，不受启动目录影响。
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests -q
+.\.venv\Scripts\python.exe -m pip install --require-hashes --only-binary=:all: -r requirements-dev-lock.txt
+.\.venv\Scripts\python.exe -m mypy --config-file mypy.ini
+.\.venv\Scripts\python.exe -m pytest tests -q --cov=services --cov=repository --cov=config --cov-fail-under=80
 .\.venv\Scripts\python.exe -m scripts.backup_db
 .\.venv\Scripts\python.exe -m scripts.restore_check runtime/backups/某份备份.sqlite3 runtime/restored.sqlite3
 ```
@@ -114,7 +118,7 @@ $env:QIANPIN_RUNTIME_DIR = "$PWD/runtime/my-demo"
 
 生成 `outputs/qianpin-*.zip`。白名单包含代码、依赖锁、样例、测试和说明，不含真实密钥、运行数据库或 `.venv`。解压后按上述安装命令复现。
 
-已提供可选 Dockerfile 与 Compose 配置；当前未进行 Docker 构建或线上部署验证。Compose 仅暴露本机回环端口，并持久挂载 runtime。对外试用时应另行配置 HTTPS 和身份验证；单体首版仅运行一个应用实例。
+Docker构建与容器冒烟已由GitHub验证。Compose仅暴露宿主机回环端口并挂载runtime，同时启用登录保护，需先按部署说明配置账号。非回环监听自动要求登录；本机127.0.0.1体验保持可用。实际对外试用仍须配置HTTPS与域名，首版仅运行一个应用实例。
 
 ## 范围和验证记录
 

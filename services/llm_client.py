@@ -2,6 +2,7 @@
 import json
 import re
 import time
+import uuid
 from decimal import Decimal
 import requests
 from config import ModelConfig, QwenConfig
@@ -9,6 +10,7 @@ from repository import BusinessError
 from services.text_check_service import text_issues
 from services.prompt_service import PROMPT_VERSION, load_prompt
 from services.retry_service import RetryPolicy
+from services.audit_service import model_audit_context, audit_event
 
 
 class ModelError(BusinessError):
@@ -56,6 +58,13 @@ class CompatibleModelClient:
     def extra_payload(self):
         return {}
 
+    def audit_attempt(self, request_id, attempt, started, status=None):
+        context = model_audit_context.get()
+        if context:
+            audit_event(context[0], 'model.attempt', 'response_received' if status is not None else 'network_failed',
+                        request_id=request_id, job_id=context[1], attempts=attempt, status_code=status,
+                        duration_ms=round((time.monotonic()-started)*1000, 2))
+
     def generate_json(self, snapshot, prompt_version=PROMPT_VERSION):
         if not self.config.api_key:
             raise ModelError(f"尚未配置{self.provider}密钥，请在本机配置后重试。", "missing_api_key", 0)
@@ -70,16 +79,20 @@ class CompatibleModelClient:
             {"role": "user", "content": json.dumps({"prompt_version": prompt_version, "confirmed_snapshot": snapshot}, ensure_ascii=False)}],
             "response_format": {"type": "json_object"}, "max_tokens": 1000, "stream": False}
         payload.update(self.extra_payload())
+        request_id = uuid.uuid4().hex
         for attempt in range(1, self.policy.max_attempts + 1):
+            started = time.monotonic()
             try:
                 response = self.post(self.config.endpoint, headers={"Authorization": "Bearer " + self.config.api_key},
                                      json=payload, timeout=(10, 45))
             except (requests.Timeout, requests.ConnectionError) as exc:
+                self.audit_attempt(request_id, attempt, started)
                 if attempt < self.policy.max_attempts:
                     self.sleep(self.policy.delay(attempt))
                     continue
                 raise ModelError("接口连接或读取超时，请检查网络后手动重试。", "network_timeout", attempt) from exc
             status = response.status_code
+            self.audit_attempt(request_id, attempt, started, status)
             if status == 429 or status in (500, 502, 503, 504):
                 if attempt < self.policy.max_attempts:
                     retry_after = getattr(response, 'headers', {}).get('Retry-After') if status == 429 else None

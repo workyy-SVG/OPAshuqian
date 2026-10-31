@@ -36,6 +36,10 @@ def test_retry_respects_server_and_never_retries_permanent_or_excess_wait(repo):
     client = DeepSeekClient(ModelConfig(api_key='fake'), post, delays.append)
     assert generate_content(repo,p,'bounded',mode='deepseek',client=client)['content_id']
     assert delays == [3] and len(calls) == 2
+    records=[json.loads(line) for line in (repo.settings.runtime_dir/'logs/events.jsonl').read_text(encoding='utf-8').splitlines()]
+    attempts=[r for r in records if r['event']=='model.attempt']
+    assert [r['status_code'] for r in attempts]==[429,200]
+    assert attempts[0]['job_id']==attempts[1]['job_id']
     first.headers = {'Retry-After': '120'}
     client = DeepSeekClient(ModelConfig(api_key='fake'), lambda *a,**kw:first, delays.append)
     with pytest.raises(ModelError) as error:

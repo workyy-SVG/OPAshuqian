@@ -2,6 +2,7 @@
 import hashlib
 import sqlite3
 import uuid
+import re
 from pathlib import Path
 from config import ROOT
 
@@ -25,10 +26,27 @@ def validate_baseline(db: sqlite3.Connection, baseline: str) -> None:
         expected.executescript(baseline)
         tables = expected.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         for (table,) in tables:
-            required = {r[1] for r in expected.execute(f'PRAGMA table_info("{table}")')}
-            actual = {r[1] for r in db.execute(f'PRAGMA table_info("{table}")')}
-            if not required <= actual:
+            required = {r[1]: tuple(r[1:]) for r in expected.execute(f'PRAGMA table_info("{table}")')}
+            actual = {r[1]: tuple(r[1:]) for r in db.execute(f'PRAGMA table_info("{table}")')}
+            if any(actual.get(name) != definition for name, definition in required.items()):
                 raise ValueError(f'旧库结构不符合基线：{table}。请先恢复备份或人工检查。')
+            def unique_indexes(connection):
+                result = set()
+                for index in connection.execute(f'PRAGMA index_list("{table}")'):
+                    if index[2]:
+                        name = index[1].replace('"', '""')
+                        columns = tuple(r[2] for r in connection.execute(f'PRAGMA index_info("{name}")'))
+                        sql = connection.execute("SELECT sql FROM sqlite_master WHERE type='index' AND name=?",(index[1],)).fetchone()[0] or ''
+                        match = re.search(r'\bWHERE\b(.*)', sql, re.I | re.S)
+                        predicate = re.sub(r'\s+', '', match[1]).lower() if match else ''
+                        result.add((columns, bool(index[4]), predicate))
+                return result
+            if not unique_indexes(expected) <= unique_indexes(db):
+                raise ValueError(f'旧库唯一约束不符合基线：{table}。')
+            required_foreign = {tuple(r[2:]) for r in expected.execute(f'PRAGMA foreign_key_list("{table}")')}
+            actual_foreign = {tuple(r[2:]) for r in db.execute(f'PRAGMA foreign_key_list("{table}")')}
+            if not required_foreign <= actual_foreign:
+                raise ValueError(f'旧库外键不符合基线：{table}。')
     finally:
         expected.close()
 
@@ -73,6 +91,8 @@ def migrate(db: sqlite3.Connection, db_path: Path, runtime_dir: Path, migrations
             version = 1
         for record in db.execute('SELECT version,checksum FROM schema_migrations'):
             number, checksum = record
+            if number != 1 and number not in files:
+                raise ValueError('迁移历史含未知版本。')
             expected = baseline_hash if number == 1 else hashlib.sha256(files[number].read_bytes()).hexdigest()
             if checksum != expected:
                 raise ValueError('已应用迁移文件发生变化，请使用原文件或新增迁移。')

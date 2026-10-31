@@ -3,6 +3,7 @@ import json
 from typing import Any
 from repository import Repository
 from services.fact_service import current_basis
+from services.date_service import today_iso
 
 Row = dict[str, Any]
 
@@ -86,3 +87,9 @@ def fact_history(repo: Repository, product_id: int) -> list[Row]:
 
 def change_history(repo: Repository, product_id: int) -> list[Row]:
     return repo.all('SELECT * FROM change_events WHERE product_id=? ORDER BY id DESC', (product_id,))
+
+
+def dated_candidates(repo: Repository, product_id: int) -> list[Row]:
+    rows = repo.all("SELECT * FROM observations WHERE product_id=? AND state='pending' AND effective_from!='' ORDER BY effective_from,id", (product_id,))
+    today = today_iso()
+    return [{**r, 'availability': 'future' if r['effective_from'] > today else 'due'} for r in rows]

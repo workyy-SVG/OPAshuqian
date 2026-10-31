@@ -6,13 +6,16 @@ from config import CONTENT_TYPES, FIELDS
 from repository import BusinessError, now
 from services.quality_service import pending_groups
 from services.audit_service import audited
+from services.date_service import today_iso
+from typing import Any
+from repository import Repository
 
 
-def canonical(snapshot):
+def canonical(snapshot: dict[str, Any]) -> str:
     return json.dumps(snapshot, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
-def snapshot_hash(snapshot):
+def snapshot_hash(snapshot: dict[str, Any]) -> str:
     return hashlib.sha256(canonical(snapshot).encode("utf-8")).hexdigest()
 
 
@@ -60,7 +63,7 @@ def _snapshot(db, product_id, context="retail", content_type="product_intro", in
             "missing": sorted(set(missing)), "conflicts": sorted(set(conflicts))}
 
 
-def build_snapshot(repo, product_id, context="retail", content_type="product_intro", include_price=True, selected_fields=None):
+def build_snapshot(repo: Repository, product_id: int, context: str = "retail", content_type: str = "product_intro", include_price: bool = True, selected_fields: list[str] | None = None) -> dict[str, Any]:
     with repo.connect() as db:
         # A read transaction prevents mixing facts from multiple committed revisions.
         db.execute("BEGIN")
@@ -90,13 +93,14 @@ def _change(db, product_id, field, context, old_id, new_id, operator, reason):
 
 
 @audited('fact.confirm')
-def confirm_fact(repo, product_id, observation_id, expected_old_id, operator, reason):
+def confirm_fact(repo: Repository, product_id: int, observation_id: int, expected_old_id: int | None, operator: str, reason: str) -> int:
     _check_operator(operator, reason)
     with repo.connect(write=True) as db:
         candidate = db.execute("SELECT * FROM observations WHERE id=? AND product_id=?", (observation_id, product_id)).fetchone()
         if not candidate or candidate["state"] != "pending" or candidate["normalized"] is None:
             raise BusinessError("候选不可确认或已被处理，请刷新。", "concurrent_change")
-        if candidate["effective_from"] and candidate["effective_from"] > datetime.now(ZoneInfo("Asia/Shanghai")).date().isoformat():
+        today = today_iso()
+        if candidate["effective_from"] and candidate["effective_from"] > today:
             raise BusinessError("未来资料暂留候选区，适用日期到达后再人工确认。")
         field, context = candidate["field"], candidate["context"]
         current = db.execute("SELECT * FROM fact_revisions WHERE product_id=? AND field=? AND context=? AND state='current'",
@@ -105,8 +109,8 @@ def confirm_fact(repo, product_id, observation_id, expected_old_id, operator, re
         if old_id != expected_old_id:
             raise BusinessError("当前修订已变化，请刷新后重新核对。", "concurrent_change")
         unresolved = db.execute("""SELECT 1 FROM observations WHERE product_id=? AND field=? AND context=?
-                                AND state='pending' AND normalized!=? LIMIT 1""",
-                                (product_id, field, context, candidate["normalized"])).fetchone()
+                                AND state='pending' AND normalized!=? AND (effective_from='' OR effective_from<=?) LIMIT 1""",
+                                (product_id, field, context, candidate["normalized"], today)).fetchone()
         if unresolved:
             raise BusinessError("仍有不同值的候选，请先排除误录或补充依据，不能直接确认。", "unresolved_conflict")
         if current and current["value"] == candidate["normalized"]:
@@ -119,17 +123,19 @@ def confirm_fact(repo, product_id, observation_id, expected_old_id, operator, re
                 (product_id, field, context, candidate["normalized"], observation_id, old_id, operator.strip(), reason.strip(), now())).lastrowid
             _change(db, product_id, field, context, old_id, new_id, operator.strip(), reason.strip())
         equal_rows = db.execute("""SELECT id FROM observations WHERE product_id=? AND field=? AND context=?
-            AND state='pending' AND normalized=?""", (product_id, field, context, candidate["normalized"])).fetchall()
+            AND state='pending' AND normalized=? AND (effective_from='' OR effective_from<=?)""", (product_id, field, context, candidate["normalized"], today)).fetchall()
         for row in equal_rows:
             db.execute("UPDATE observations SET state='adopted',operator=?,reason=?,handled_at=? WHERE id=?",
                        (operator.strip(), reason.strip(), now(), row[0]))
             db.execute("INSERT INTO observation_actions(observation_id,action,operator,reason,created_at) VALUES(?,?,?,?,?)",
                        (row[0], "confirm", operator.strip(), reason.strip(), now()))
+        if new_id is None:
+            raise BusinessError('修订写入未返回编号，操作已回滚。')
         return new_id
 
 
 @audited('fact.withdraw')
-def withdraw_fact(repo, product_id, field, context, expected_old_id, operator, reason):
+def withdraw_fact(repo: Repository, product_id: int, field: str, context: str, expected_old_id: int, operator: str, reason: str) -> None:
     _check_operator(operator, reason)
     with repo.connect(write=True) as db:
         row = db.execute("SELECT * FROM fact_revisions WHERE product_id=? AND field=? AND context=? AND state='current'",

@@ -11,12 +11,13 @@ from pathlib import Path
 from config import BRAND_CODE, FIELDS, MAX_UPLOAD_BYTES, MAX_IMPORT_ROWS
 from repository import BusinessError, now
 from services.unit_service import normalize_weight
+from repository import Repository
 
 COLUMNS = ["sku", "product_version", "field_key", "raw_value", "context_key",
            "source_label", "source_locator", "effective_from"]
 
 
-def normalize_value(field, raw):
+def normalize_value(field: str, raw: str) -> str:
     value = raw.strip()
     if not value:
         raise BusinessError("值不能为空。")
@@ -40,7 +41,7 @@ def normalize_value(field, raw):
     return " ".join(value.split())
 
 
-def normalize_rows(rows):
+def normalize_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     results = []
     for row in rows:
         item = dict(row)
@@ -81,7 +82,7 @@ def normalize_rows(rows):
     return results
 
 
-def preview_import(file_bytes, encoding="utf-8-sig"):
+def preview_import(file_bytes: bytes, encoding: str = "utf-8-sig") -> dict[str, Any]:
     if len(file_bytes) > MAX_UPLOAD_BYTES:
         raise BusinessError("文件超过 5MB 上限。", "file_size")
     if encoding not in ("utf-8-sig", "gb18030"):
@@ -120,7 +121,7 @@ def preview_import(file_bytes, encoding="utf-8-sig"):
             "rows": normalize_rows(rows) if not errors else []}
 
 
-def commit_import(repo, preview, original_name="资料.csv"):
+def commit_import(repo: Repository, preview: dict[str, Any], original_name: str = "资料.csv") -> dict[str, Any]:
     # Re-parse original bytes rather than trusting editable preview objects.
     checked = preview_import(preview["file_bytes"], preview["encoding"])
     if checked["errors"]:
@@ -161,7 +162,7 @@ def _counts(db, source_id):
             "duplicates": counts.get("duplicate", 0), "errors": counts.get("error", 0), "pending": counts.get("pending", 0)}
 
 
-def add_manual(repo, product_id, field, raw, context, source_label, reason, operator, effective_from=""):
+def add_manual(repo: Repository, product_id: int, field: str, raw: str, context: str, source_label: str, reason: str, operator: str, effective_from: str = "") -> int:
     product = repo.one("SELECT * FROM product_versions WHERE id=?", (product_id,))
     if not product:
         raise BusinessError("产品不存在。")
