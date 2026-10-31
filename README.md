@@ -2,7 +2,7 @@
 
 面向地方特色食品小微品牌的产品资料核对与内容协同工具。按实施手册实现 Python 3.13、Streamlit、SQLite 本地单体应用，支持 DeepSeek 及无需密钥的模板模式。
 
-**当前状态：本地首版已实现，30 项自动化测试通过，拟制资料的完整闭环和备份恢复已验证。真实 DeepSeek 调用尚未验证，需要在本机配置自己的 API Key。**
+**当前状态：本地首版已实现，30 项自动化测试通过，Windows / Linux CI 与运行包独立环境复现通过，拟制资料闭环和备份恢复已验证。真实 DeepSeek 调用尚未验证，需要在本机配置自己的 API Key。**
 
 ## 四个工作页面
 
@@ -36,7 +36,7 @@ uv venv --python 3.13 .venv
 uv pip install --python .venv/Scripts/python.exe -r requirements-lock.txt
 ```
 
-Linux / macOS 使用 `python3.13 -m venv .venv`，后续解释器路径改为 `.venv/bin/python`。当前本机验证平台为 Windows，其他平台的 CI 结果见 GitHub Actions。
+Linux / macOS 使用 `python3.13 -m venv .venv`，后续解释器路径改为 `.venv/bin/python`。本机验证平台为 Windows；[Windows 与 Linux CI 已通过](https://github.com/workyy-SVG/OPAshuqian/actions/runs/41188485804)，macOS 尚未验证。
 
 ## 第一次体验
 
