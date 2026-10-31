@@ -218,3 +218,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Qianpin local business data and delivery bundles
+runtime/
+outputs/
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+
