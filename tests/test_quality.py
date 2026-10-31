@@ -21,3 +21,18 @@ def test_conflict_requires_explicit_exclusion(repo):
     assert fact
     assert repo.one("SELECT COUNT(*) n FROM observations WHERE product_id=? AND field='net_weight_g' AND state='adopted'", (product,))["n"] == 2
     assert "product_name" in build_snapshot(repo, product)["missing"]
+
+
+def test_reassignment_is_audited_and_future_candidates_stay_pending(repo):
+    from services.import_service import add_manual
+    from services.quality_service import reassign_observation
+    p = repo.add_product("001", "V1")
+    p2 = repo.add_product("002", "V1")
+    obs = add_manual(repo, p, "net_weight_g", "200g", "general", "拟制包装", "补录", "甲")
+    reassign_observation(repo, obs, p2, "甲", "确认属于002")
+    assert repo.one("SELECT product_id FROM observations WHERE id=?", (obs,))["product_id"] == p2
+    assert repo.one("SELECT * FROM observation_actions WHERE action='reassign'")["old_product_id"] == p
+    future = add_manual(repo, p, "price_cent", "12.00", "retail", "未来价单", "暂存", "甲", "2099-01-01")
+    with pytest.raises(BusinessError, match="未来资料"):
+        confirm_fact(repo, p, future, None, "甲", "不能提前生效")
+    assert repo.one("SELECT state FROM observations WHERE id=?", (future,))["state"] == "pending"

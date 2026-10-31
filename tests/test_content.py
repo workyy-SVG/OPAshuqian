@@ -49,6 +49,14 @@ def test_running_job_is_not_automatically_retried(repo):
     assert len(repo.all("SELECT * FROM generation_jobs")) == 1
 
 
+def test_request_key_cannot_be_reused_for_changed_price_scope(repo):
+    p = confirmed(repo)
+    generate_content(repo, p, "fixed")
+    with pytest.raises(BusinessError) as error:
+        generate_content(repo, p, "fixed", include_price=False)
+    assert error.value.code == "request_key_conflict"
+
+
 def test_all_input_facts_are_dependencies(repo):
     p = confirmed(repo)
     cid = generate_content(repo, p, "r")["content_id"]

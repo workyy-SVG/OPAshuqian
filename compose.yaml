@@ -1,0 +1,9 @@
+services:
+  web:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8501:8501"
+    volumes:
+      - ./runtime:/app/runtime
+      - ./.streamlit:/app/.streamlit:ro

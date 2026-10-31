@@ -133,7 +133,7 @@ def commit_import(repo, preview, original_name="资料.csv"):
             return {"source_id": existing[0], "reused": True, **_counts(db, existing[0])}
         path.write_bytes(checked["file_bytes"])
         source_id = db.execute("INSERT INTO sources(sha256,original_name,stored_path,encoding,created_at) VALUES(?,?,?,?,?)",
-            (digest, Path(original_name.replace("\\", "/")).name, str(path), checked["encoding"], now())).lastrowid
+            (digest, Path(original_name.replace("\\", "/")).name, str(path.relative_to(repo.settings.runtime_dir)), checked["encoding"], now())).lastrowid
         for item in checked["rows"]:
             product_id = None
             state = "error" if item["error"] else "pending"

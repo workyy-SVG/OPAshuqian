@@ -29,7 +29,10 @@ def create_generation(repo, product_id, request_key, context="retail", content_t
     with repo.connect(write=True) as db:
         existing = db.execute("SELECT * FROM generation_jobs WHERE request_key=?", (request_key,)).fetchone()
         if existing:
-            if (existing["product_id"], existing["context"], existing["content_type"]) != (product_id, context, content_type):
+            old_snapshot = json.loads(existing["snapshot_json"])
+            expected_model = "template" if mode == "template" else model_name
+            if ((existing["product_id"], existing["context"], existing["content_type"]) != (product_id, context, content_type)
+                    or old_snapshot["include_price"] != include_price or existing["model"] != expected_model):
                 raise BusinessError("请求编号已用于其他生成范围。", "request_key_conflict")
             return {"job": dict(existing), "created": False}
         basis = _snapshot(db, product_id, context, content_type, include_price, selected_fields)
@@ -186,5 +189,5 @@ def export_content(repo, content_id, operator):
         path = folder / filename
         path.write_text(text, encoding="utf-8")
         db.execute("INSERT INTO export_records(content_id,operator,basis_hash,body_hash,stored_path,created_at) VALUES(?,?,?,?,?,?)",
-                   (content_id, operator.strip(), row["snapshot_hash"], hashlib.sha256(text.encode()).hexdigest(), str(path), now()))
+                   (content_id, operator.strip(), row["snapshot_hash"], hashlib.sha256(text.encode()).hexdigest(), str(path.relative_to(repo.settings.runtime_dir)), now()))
         return {"text": text, "filename": filename, "path": str(path)}

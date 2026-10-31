@@ -1,0 +1,9 @@
+.git
+.venv
+runtime
+outputs
+.streamlit/secrets.toml
+__pycache__
+**/__pycache__
+.pytest_cache
+.env
