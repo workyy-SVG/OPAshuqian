@@ -5,6 +5,7 @@ from decimal import Decimal
 from repository import BusinessError, now
 from services.fact_service import _snapshot, canonical, current_basis, snapshot_hash
 from services.llm_client import PROMPT_VERSION, ModelError, validate_result
+from services.text_check_service import assert_text_matches
 
 
 def template_result(snapshot):
@@ -114,6 +115,7 @@ def _assert_current(db, row):
     current = current_basis(db, json.loads(row["snapshot_json"]))
     if current["missing"] or current["snapshot_hash"] != row["snapshot_hash"]:
         raise BusinessError("依据已变化或存在冲突，请生成新修订并重新审核。", "stale_basis")
+    assert_text_matches(row["title"], row["body"], current["snapshot"])
 
 
 def edit_content(repo, content_id, title, body, operator, reason, rebind=False):
@@ -129,6 +131,7 @@ def edit_content(repo, content_id, title, body, operator, reason, rebind=False):
             if basis["missing"]:
                 raise BusinessError("当前依据不完整或存在冲突，不能重绑。")
             snapshot = basis["snapshot"]
+            assert_text_matches(title, body, snapshot)
         basis = current_basis(db, snapshot)
         state = "stale" if basis["missing"] or basis["snapshot_hash"] != snapshot_hash(snapshot) else "draft"
         new_id = _insert_content(db, snapshot, {"title": title, "body": body}, state, "manual", logical_id=old["logical_id"], reason=reason.strip())
