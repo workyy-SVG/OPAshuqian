@@ -1,11 +1,11 @@
 import json
 import pytest
 import requests
-from config import ModelConfig
+from config import ModelConfig, QwenConfig
 from repository import BusinessError
 from services.fact_service import build_snapshot
 from services.content_service import template_result, generate_content
-from services.llm_client import DeepSeekClient, ModelError
+from services.llm_client import DeepSeekClient, QwenClient, ModelError
 from tests.conftest import confirmed
 
 
@@ -79,3 +79,23 @@ def test_wrong_quantity_rejected(repo):
     with pytest.raises(ModelError) as err:
         client.generate_json(snap)
     assert err.value.code == "fact_mismatch"
+
+
+def test_qwen_uses_official_endpoint_and_json_mode(repo):
+    p = confirmed(repo)
+    snap = build_snapshot(repo, p)["snapshot"]
+    result = template_result(snap)
+    requests_seen = []
+    def post(*args, **kwargs):
+        requests_seen.append((args, kwargs))
+        return Response(content=json.dumps(result))
+    client = QwenClient(QwenConfig(api_key="test-qwen-key"), post, lambda _: None)
+    cid = generate_content(repo, p, "qwen", mode="qwen", client=client)["content_id"]
+    assert cid
+    args, kwargs = requests_seen[0]
+    assert args[0] == "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+    assert kwargs["json"]["response_format"] == {"type": "json_object"}
+    assert kwargs["json"]["enable_thinking"] is False
+    assert "thinking" not in kwargs["json"]
+    job = repo.one("SELECT model,state FROM generation_jobs")
+    assert job["model"] == "qwen-plus" and job["state"] == "succeeded"

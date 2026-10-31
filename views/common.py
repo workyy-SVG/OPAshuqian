@@ -1,7 +1,7 @@
 import sqlite3
 from decimal import Decimal
 import streamlit as st
-from config import FIELDS, ModelConfig
+from config import FIELDS, ModelConfig, QwenConfig
 from repository import BusinessError
 
 STATES = {"pending": "待确认", "adopted": "已采纳", "excluded": "已排除", "duplicate": "重复证据",
@@ -32,16 +32,28 @@ def action(callback, success="操作已保存。"):
     return True, result
 
 
-def model_config():
+def model_configs():
     import os
-    values = {}
+    deepseek_values = {}
+    qwen_values = {}
     try:
-        values = dict(st.secrets.get("model", {}))
+        # Keep reading [model] so existing local DeepSeek configurations continue to work.
+        deepseek_values = dict(st.secrets.get("deepseek", st.secrets.get("model", {})))
+        qwen_values = dict(st.secrets.get("qwen", {}))
     except (FileNotFoundError, st.errors.StreamlitSecretNotFoundError):
         pass
-    return ModelConfig(api_key=os.environ.get("DEEPSEEK_API_KEY", values.get("api_key", "")),
-                       endpoint=values.get("endpoint", ModelConfig().endpoint),
-                       name=values.get("name", ModelConfig().name))
+    deepseek = ModelConfig(api_key=os.environ.get("DEEPSEEK_API_KEY", deepseek_values.get("api_key", "")),
+                           endpoint=deepseek_values.get("endpoint", ModelConfig().endpoint),
+                           name=deepseek_values.get("name", ModelConfig().name))
+    qwen = QwenConfig(api_key=os.environ.get("DASHSCOPE_API_KEY", qwen_values.get("api_key", "")),
+                      endpoint=qwen_values.get("endpoint", QwenConfig().endpoint),
+                      name=qwen_values.get("name", QwenConfig().name))
+    return {"deepseek": deepseek, "qwen": qwen}
+
+
+def model_config():
+    """Compatibility helper for callers that still expect only DeepSeek."""
+    return model_configs()["deepseek"]
 
 
 def fact_table(repo, product_id):

@@ -31,3 +31,10 @@ class ModelConfig:
     api_key: str = ""
     endpoint: str = "https://api.deepseek.com/chat/completions"
     name: str = "deepseek-flash"
+
+
+@dataclass(frozen=True)
+class QwenConfig:
+    api_key: str = ""
+    endpoint: str = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+    name: str = "qwen-plus"

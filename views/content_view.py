@@ -5,8 +5,8 @@ from config import CONTENT_TYPES, FIELDS
 from repository import BusinessError
 from services.fact_service import build_snapshot, current_basis
 from services.content_service import (generate_content, edit_content, submit_for_review, approve_content, export_content)
-from services.llm_client import DeepSeekClient
-from views.common import STATES, action, display_value, model_config
+from services.llm_client import DeepSeekClient, QwenClient
+from views.common import STATES, action, display_value, model_configs
 
 
 def render(repo, product_id, operator):
@@ -23,12 +23,14 @@ def render(repo, product_id, operator):
             include_price = st.checkbox("加入该渠道价格", value=True)
             optional = st.multiselect("加入已确认的说明字段", ["ingredients_text", "usage_text", "storage_text"],
                                       default=["ingredients_text", "usage_text", "storage_text"], format_func=FIELDS.get)
-            mode = st.radio("生成方式", ["template", "deepseek"], format_func=lambda v: "模板模式（不调用模型）" if v == "template" else "DeepSeek 实时生成", horizontal=True)
-            cfg = model_config()
+            labels = {"template": "模板模式（不调用模型）", "deepseek": "DeepSeek 实时生成", "qwen": "通义千问实时生成"}
+            mode = st.radio("生成方式", list(labels), format_func=labels.get, horizontal=True)
+            configs = model_configs()
+            cfg = configs.get(mode)
             if mode == "template":
                 st.caption("模板按确认资料直接填充，用于验证流程；不计为真实模型调用。")
             elif not cfg.api_key:
-                st.info("尚未配置模型密钥。按 README 在本机填写 .streamlit/secrets.toml 后即可使用。")
+                st.info(f"尚未配置{labels[mode].replace('实时生成', '')}密钥。按 README 在本机填写 .streamlit/secrets.toml 后即可使用。")
             else:
                 st.caption(f"模型：{cfg.name} · 输出仍需人工核对，不自动视为事实正确。")
         # Include only available optional facts; absent optional fields are never invented.
@@ -50,13 +52,13 @@ def render(repo, product_id, operator):
                     st.warning("请先补齐或处理冲突：" + "、".join(FIELDS[f] for f in basis["missing"]))
                 if basis["conflicts"]:
                     st.warning("所选字段存在未解决冲突，请到数据核对页处理。")
-        disabled = not basis or bool(basis["missing"]) or (mode == "deepseek" and not cfg.api_key)
+        disabled = not basis or bool(basis["missing"]) or (mode != "template" and not cfg.api_key)
         if st.button("生成一份草稿", type="primary", disabled=disabled, key="generate_draft"):
             request_key = uuid.uuid4().hex
             st.session_state["last_request_key"] = request_key
             with st.spinner("正在生成并核对依据…"):
                 ok, result = action(lambda: generate_content(repo, product_id, request_key, context, content_type, include_price,
-                    mode, DeepSeekClient(cfg) if mode == "deepseek" else None,
+                    mode, DeepSeekClient(cfg) if mode == "deepseek" else QwenClient(cfg) if mode == "qwen" else None,
                     ["product_name", "net_weight_g"] + selected), "草稿已保存，请在“审核与历史”中逐句核对。")
             if ok:
                 st.session_state["focused_content"] = result["content_id"]

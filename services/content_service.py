@@ -24,7 +24,7 @@ def template_result(snapshot):
 
 def create_generation(repo, product_id, request_key, context="retail", content_type="product_intro", include_price=True,
                       mode="template", model_name="template", selected_fields=None):
-    if mode not in ("template", "deepseek") or not request_key.strip():
+    if mode not in ("template", "deepseek", "qwen") or not request_key.strip():
         raise BusinessError("生成模式或请求编号无效。")
     with repo.connect(write=True) as db:
         existing = db.execute("SELECT * FROM generation_jobs WHERE request_key=?", (request_key,)).fetchone()

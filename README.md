@@ -53,25 +53,31 @@ Linux / macOS 使用 `python3.13 -m venv .venv`，后续解释器路径改为 `.
 
 ## 模型配置
 
-复制配置示例到本机文件，填写自己的密钥：
+复制配置示例到本机文件，可填写一个或两个模型的密钥：
 
 ```powershell
 Copy-Item .streamlit/secrets.example.toml .streamlit/secrets.toml
 ```
 
 ```toml
-[model]
+[deepseek]
 api_key = "本机填写，勿提交"
 endpoint = "https://api.deepseek.com/chat/completions"
 name = "deepseek-flash"
+
+[qwen]
+api_key = "本机填写，勿提交"
+endpoint = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+name = "qwen-plus"
 ```
 
-也支持 `DEEPSEEK_API_KEY` 环境变量。模型配置集中管理，密钥不写入数据库和日志。首版仅允许 DeepSeek 官方 HTTPS 端点，关闭思考模式并请求 JSON 输出。调用包含所选确认快照，请仅使用有授权的资料。
+也支持 `DEEPSEEK_API_KEY` 和 `DASHSCOPE_API_KEY` 环境变量。模型配置集中管理，密钥不写入数据库和日志。仅允许两个提供方的官方 HTTPS 端点，关闭思考模式并请求 JSON 输出。调用包含所选确认快照，请仅使用有授权的资料。
 
-配置后在内容工作台选择“DeepSeek 实时生成”。可单独执行一次真实接口检查（会消耗 API 额度，产品编号以本机数据库为准）：
+配置后可在内容工作台选择“DeepSeek 实时生成”或“通义千问实时生成”。可分别执行一次真实接口检查（会消耗 API 额度，产品编号以本机数据库为准）：
 
 ```powershell
 .\.venv\Scripts\python.exe -m scripts.check_model 1 --confirm-live
+.\.venv\Scripts\python.exe -m scripts.check_model 1 --provider qwen --confirm-live
 ```
 
 401 / 402 等配置与余额错误不会自动重试；连接超时、429 和部分 5xx 最多额外重试一次。任务记录模型、提示词版本、次数、用量与脱敏错误码。崩溃遗留的运行中任务由用户核查后明确新建请求，不自动重复计费。
