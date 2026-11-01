@@ -32,11 +32,13 @@ def test_status_text_contrast(fg, bg):
     assert (b+.05)/(a+.05) >= 4.5
 
 
-def test_first_visit_guide_loads_sample_but_never_confirms(tmp_path, monkeypatch):
+def test_sample_import_is_explicit_and_never_confirms(tmp_path, monkeypatch):
     monkeypatch.setenv('QIANPIN_RUNTIME_DIR', str(tmp_path))
     monkeypatch.delenv('QIANPIN_DB_PATH', raising=False)
     app = AppTest.from_file(str(ROOT/'app.py'), default_timeout=20).run()
-    app.button(key='welcome_import').click().run()
+    assert not any((b.key or '').startswith('welcome_') for b in app.button)
+    app.button(key='import_sample').click().run()
+    app.button(key='step:数据核对').click().run()
     assert not app.exception
     assert app.radio(key='navigation').value == '数据核对'
     from repository import Repository
@@ -49,7 +51,8 @@ def test_candidate_card_requires_explicit_exclusion_acknowledgement(tmp_path, mo
     monkeypatch.setenv('QIANPIN_RUNTIME_DIR', str(tmp_path))
     monkeypatch.delenv('QIANPIN_DB_PATH', raising=False)
     app = AppTest.from_file(str(ROOT/'app.py'), default_timeout=20).run()
-    app.button(key='welcome_import').click().run()
+    app.button(key='import_sample').click().run()
+    app.button(key='step:数据核对').click().run()
     app.text_input(key='operator').set_value('体验测试员').run()
     from repository import Repository
     from config import Settings

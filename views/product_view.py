@@ -12,6 +12,7 @@ def render(repo, product_id, operator):
     st.write("先选择一种收集方式；保存后进入待确认候选，人工核对后才用于生成。")
     from views.tutorial_view import flow_diagram
     flow_diagram([('选择来源','按分类选商品、上传CSV，或手动补录'),('预览并保存','确认SKU、版本和原文，保存为候选'),('去数据核对','对照可靠来源，逐项确认资料')])
+    st.subheader('① 收集与保存资料')
     tabs = st.tabs(["公开食品资料", "CSV 导入", "手动补录", "来源与历史"])
     with tabs[1]:
         st.subheader('上传你已有的产品资料')
@@ -142,6 +143,7 @@ def render(repo, product_id, operator):
         from views.food_facts_view import render as render_food_facts
         render_food_facts(repo)
     if product_id:
+        st.subheader('② 检查结果并进入核对')
         next_button('下一步：去核对并确认资料', '数据核对', 'product:quality')
         with st.expander('当前已确认资料（生成使用这些信息）', expanded=False):
             fact_table(repo, product_id)

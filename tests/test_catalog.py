@@ -44,7 +44,6 @@ def test_catalog_select_preview_import_and_change_category(repo,monkeypatch):
     monkeypatch.setattr(food.requests,'get',get)
     for d in food._calls.values(): d.clear()
     app=AppTest.from_file(str(ROOT/'app.py'),default_timeout=20).run()
-    app.button(key='welcome_close').click().run()
     assert calls==[]
     app.selectbox(key='catalog_category').set_value('水饮').run()
     app.button(key='catalog_load').click().run()

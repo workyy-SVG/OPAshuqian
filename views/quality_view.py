@@ -10,13 +10,13 @@ from views.components import empty_state, status_badge, state_table
 
 def render(repo, product_id, operator):
     st.write('这里的任务是：对照包装或可靠来源，决定每一项资料要不要采用。导入成功不等于已经确认。')
-    help_tab, work_tab, history_tab = st.tabs(['先看懂怎么核对','开始逐项核对','确认结果与处理记录'])
+    work_tab, history_tab, help_tab = st.tabs(['① 待处理资料','② 确认结果与记录','操作说明'])
     with help_tab:
         from views.tutorial_view import flow_diagram
         st.subheader('先弄清三个词')
         flow_diagram([('候选','资料来源提供的说法，还不能用于生成'),('冲突','同一字段出现不同值，需要你查证'),('确认资料','你核对后决定采用的事实，生成会使用它')])
         st.markdown('**照着这五步做**')
-        for step in ['① 在侧栏选择SKU/版本，填写操作人。','② 切到“开始逐项核对”，先处理有冲突的字段。',
+        for step in ['① 在侧栏选择SKU/版本，填写操作人。','② 切到“待处理资料”，先处理有冲突的字段。',
                      '③ 看候选卡片：原文是什么、从哪里来，与实物是否一致。',
                      '④ 点“选此项确认”或“选此项排除”，填写依据，再点“保存本次处理”。',
                      '⑤ 重复确认名称和净含量；需要价格时再确认对应渠道价格。完成后去生成内容。']:
@@ -149,4 +149,4 @@ def render_work(repo, product_id, operator):
     if not counts[0] and not counts[1]:
         st.success('名称和净含量已确认。生成含价格的内容前，还需确认对应渠道价格。')
         next_button('下一步：去生成内容', '内容工作台', 'quality:generate')
-    st.caption('处理后可在“确认结果与处理记录”查看采用了什么资料，以及处理原因。')
+    st.caption('处理后可在“确认结果与记录”查看采用了什么资料，以及处理原因。')

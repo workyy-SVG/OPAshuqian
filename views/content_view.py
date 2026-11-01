@@ -20,7 +20,7 @@ def render(repo, product_id, operator):
         empty_state('准备好资料，就能生成第一份内容', '先导入来源，再确认名称与净含量。', '去准备产品资料', '产品资料', 'content:import')
         return
     current = queries.current_facts(repo, product_id)
-    create_tab, history_tab = st.tabs(["生成内容", "审核与历史"])
+    create_tab, history_tab = st.tabs(["① 生成内容", "② 审核与导出"])
     with create_tab:
         left, right = st.columns([3, 2])
         with left:
@@ -80,7 +80,7 @@ def render(repo, product_id, operator):
                 bar = st.progress(.2, text='2/3 正在生成；模型通常需要数十秒，网络重试可能更久。')
                 ok, result = action(lambda: generate_content(repo, product_id, request_key, context, content_type, include_price,
                     mode, DeepSeekClient(cfg) if mode == "deepseek" else QwenClient(cfg) if mode == "qwen" else None,
-                    ["product_name", "net_weight_g"] + selected), "草稿已保存，请在“审核与历史”中逐句核对。")
+                    ["product_name", "net_weight_g"] + selected), "草稿已保存，请在“审核与导出”中逐句核对。")
                 if ok:
                     bar.progress(1.0, text='3/3 已完成输出校验并保存草稿。')
                     task.update(label='草稿已保存，等待人工审核', state='complete', expanded=False)

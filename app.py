@@ -26,7 +26,9 @@ with st.sidebar:
     st.title("🌿 黔品智营")
     st.caption("产品资料有据 · 内容更新可追溯")
     st.divider()
-    page = st.radio("工作空间", ["使用教程", "产品资料", "数据核对", "内容工作台", "变更追踪"], index=1, key="navigation")
+    routes = {'产品资料':'01 · 产品资料','数据核对':'02 · 数据核对','内容工作台':'03 · 内容工作台','变更追踪':'04 · 变更追踪','使用教程':'帮助 · 使用教程'}
+    st.caption('按01—04顺序处理业务；需要说明时打开使用教程。')
+    page = st.radio("工作流程", list(routes), format_func=routes.get, key="navigation")
     st.divider()
     st.caption(BRAND_NAME)
     st.subheader('当前产品')
@@ -53,12 +55,10 @@ with st.sidebar:
     st.checkbox('显示模块使用说明', value=True, key='show_module_guide')
     if not operator.strip():
         st.caption('开始确认或审核前，记得填写操作人。')
-    if st.button('打开体验向导', key='open_guide'):
-        st.session_state['open_welcome'] = True
     with st.expander('背景风格', expanded=False):
         st.selectbox('选择界面风格', list(THEMES), key='background_style')
         st.caption('五种风格可随时切换，本次会话内保留；不影响产品资料。')
-    st.caption("教学演示 · 公开资料需核对，样例为拟制")
+    st.caption("公开资料需核对 · 只有人工确认后才用于生成")
 
 notifications()
 apply_background()
@@ -77,5 +77,3 @@ from views import tutorial_view
     "内容工作台": content_view.render,
     "变更追踪": impact_view.render,
 }[page](repo, product_id, operator)
-from views.onboarding import show
-show(repo, progress, not products and page != '使用教程')

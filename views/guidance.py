@@ -73,6 +73,12 @@ def workspace_header(page, product=None, progress=None):
     context = f"{product['sku']} / {product['version']}" if product else '从导入第一份资料开始'
     st.markdown(f'''<section class="qp-hero"><div class="qp-eyebrow">黔品智营 / {module['tag']} / {module['number']}</div>
         <h1>{page}</h1><p>{module['summary']}</p><span class="qp-context">{escape(context)}</span></section>''', unsafe_allow_html=True)
+    goals = {'产品资料':('收集有来源的资料，保存为待确认候选','数据核对'),
+             '数据核对':('查证候选，记录依据，确认名称和净含量','内容工作台'),
+             '内容工作台':('使用确认资料生成草稿，人工审核后下载','变更追踪'),
+             '变更追踪':('检查变化影响，更新关联文案并重新审核','内容工作台')}
+    goal, following = goals[page]
+    st.caption(f'本页目标：{goal}。完成后进入：{following}。')
     for col, name in zip(st.columns(4), MODULES):
         with col:
             done = bool(progress and progress['steps'][list(MODULES).index(name)])
@@ -87,6 +93,10 @@ def workspace_header(page, product=None, progress=None):
             with st.expander('操作要点与常见问题'):
                 for tip in module['tips']:
                     st.write('• ' + tip)
+            def open_module_tutorial():
+                st.session_state['next_tutorial_topic'] = page
+                navigate('使用教程')
+            st.button('查看本模块完整流程图与操作说明',key='module_tutorial:'+page,on_click=open_module_tutorial)
     st.write('')
 
 
