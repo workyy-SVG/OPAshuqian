@@ -61,7 +61,7 @@ def _request(url: str, params: dict[str, str]) -> dict[str, Any]:
             if response.status_code == 429:
                 raise BusinessError('数据源查询限流，请稍后再试或使用CSV演示。', 'food_rate_limit')
             if response.status_code != 200:
-                raise BusinessError('数据源暂时不可用，请稍后再试或使用CSV演示。', 'food_unavailable')
+                raise BusinessError(f'数据源暂时不可用（HTTP {response.status_code}），请稍后再试或使用CSV演示。', 'food_unavailable')
             body = bytearray()
             for chunk in response.iter_content(65536):
                 body.extend(chunk)
