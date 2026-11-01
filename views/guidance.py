@@ -80,7 +80,7 @@ def workspace_header(page, product=None, progress=None):
             st.button(f"{MODULES[name]['number']} · {name}", key='step:'+name, type='primary' if name == page else 'secondary',
                       on_click=navigate, args=(name,), width='stretch')
     if st.session_state.get('show_module_guide', True):
-        with st.expander('本模块怎么用 · 三步上手', expanded=True):
+        with st.expander('本模块怎么用 · 三步上手', expanded=False):
             for i, (col, (title, description)) in enumerate(zip(st.columns(3), module['steps']), 1):
                 with col:
                     st.markdown(f'<div class="qp-step-no">STEP {i:02}</div><div class="qp-step-title">{title}</div><div class="qp-step-copy">{description}</div>', unsafe_allow_html=True)

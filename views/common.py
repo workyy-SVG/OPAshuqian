@@ -32,11 +32,11 @@ def action(callback, success="操作已保存。"):
     try:
         result = callback()
     except BusinessError as exc:
-        st.error(str(exc))
-        return False, None
+        st.session_state['notice'] = ('error', str(exc))
+        st.rerun()
     except sqlite3.OperationalError:
-        st.error("数据库暂时不可写，请关闭数据库查看器的编辑事务，稍后重试。")
-        return False, None
+        st.session_state['notice'] = ('error', '数据库暂时不可写，请关闭数据库查看器的编辑事务，稍后重试。')
+        st.rerun()
     st.session_state["notice"] = success
     from services.bootstrap_service import cached_products
     cached_products.clear()

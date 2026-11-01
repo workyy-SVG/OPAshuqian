@@ -11,21 +11,23 @@ from views.guidance import next_button
 from services.text_check_service import text_findings
 from services import query_service as queries
 from services.quota_service import quota_status
+from views.components import content_card, empty_state, state_table
 
 
 def render(repo, product_id, operator):
     st.write("只使用已确认资料组织内容。每份内容保留输入快照，逐句审核后才能导出。")
     if not product_id:
-        st.info("请先导入产品资料并确认名称、净含量。")
-        next_button('去准备产品资料', '产品资料', 'content:import')
+        empty_state('准备好资料，就能生成第一份内容', '先导入来源，再确认名称与净含量。', '去准备产品资料', '产品资料', 'content:import')
         return
+    current = queries.current_facts(repo, product_id)
     create_tab, history_tab = st.tabs(["生成内容", "审核与历史"])
     with create_tab:
         left, right = st.columns([3, 2])
         with left:
             content_type = st.radio("内容类型", list(CONTENT_TYPES), format_func=CONTENT_TYPES.get, horizontal=True)
             context = st.selectbox('价格渠道', available_channels(repo, product_id), format_func=display_context, key='generate_channel')
-            include_price = st.checkbox("加入该渠道价格", value=True)
+            include_price = st.checkbox("加入该渠道价格", value=any(f['field']=='price_cent' and f['context']==context for f in current),
+                                        key=f'include-price:{product_id}:{context}', help='未确认价格时可以先关闭，用名称和重量体验流程。')
             optional = st.multiselect("加入已确认的说明字段", ["ingredients_text", "usage_text", "storage_text"],
                                       default=["ingredients_text", "usage_text", "storage_text"], format_func=FIELDS.get)
             labels = {"template": "模板模式（不调用模型）", "deepseek": "DeepSeek 实时生成", "qwen": "通义千问实时生成"}
@@ -33,8 +35,10 @@ def render(repo, product_id, operator):
             configs = model_configs()
             cfg = configs.get(mode)
             quotas = quota_status(repo)
-            st.caption(f"今日 API 调用（北京时间）：DeepSeek {quotas['deepseek']['used']}/100 · "
-                       f"通义千问 {quotas['qwen']['used']}/100；每天 00:00 自动重置。")
+            with st.expander('今日模型调用额度 · 每天北京时间00:00重置'):
+                for provider,label in (('deepseek','DeepSeek'),('qwen','通义千问')):
+                    used = quotas[provider]['used']
+                    st.progress(min(used/100,1.0), text=f'{label} · 已用 {used}/100，剩余 {quotas[provider]["remaining"]}')
             if mode == "template":
                 st.caption("模板按确认资料直接填充，用于验证流程；不计为真实模型调用。")
             elif not cfg.api_key:
@@ -42,7 +46,6 @@ def render(repo, product_id, operator):
             else:
                 st.caption(f"模型：{cfg.name} · 输出仍需人工核对，不自动视为事实正确。")
         # Include only available optional facts; absent optional fields are never invented.
-        current = queries.current_facts(repo, product_id)
         selected = [f for f in optional if any(r["field"] == f for r in current)]
         try:
             basis = build_snapshot(repo, product_id, context, content_type, include_price,
@@ -70,10 +73,15 @@ def render(repo, product_id, operator):
         if st.button("生成一份草稿", type="primary", disabled=disabled, key="generate_draft"):
             request_key = uuid.uuid4().hex
             st.session_state["last_request_key"] = request_key
-            with st.spinner("正在生成并核对依据…"):
+            with st.status('正在组织内容', expanded=True) as task:
+                st.write('1/3 已收集本次生成参数和确认依据。')
+                bar = st.progress(.2, text='2/3 正在生成；模型通常需要数十秒，网络重试可能更久。')
                 ok, result = action(lambda: generate_content(repo, product_id, request_key, context, content_type, include_price,
                     mode, DeepSeekClient(cfg) if mode == "deepseek" else QwenClient(cfg) if mode == "qwen" else None,
                     ["product_name", "net_weight_g"] + selected), "草稿已保存，请在“审核与历史”中逐句核对。")
+                if ok:
+                    bar.progress(1.0, text='3/3 已完成输出校验并保存草稿。')
+                    task.update(label='草稿已保存，等待人工审核', state='complete', expanded=False)
             if ok:
                 st.session_state["focused_content"] = result["content_id"]
                 st.rerun()
@@ -92,10 +100,11 @@ def render(repo, product_id, operator):
                 f"#{i} · {CONTENT_TYPES[row_map[i]['content_type']]} · R{row_map[i]['revision']} · {STATES[row_map[i]['state']]}")
             render_content(repo, row_map[selected_id], operator)
         else:
-            st.info("尚无内容。确认必需资料后生成第一份草稿。")
+            empty_state('这里会保存你的第一份草稿', '切换“生成内容”，使用模板即可体验，无需模型密钥。',
+                        '检查生成所需资料', '数据核对', 'history:quality')
         with st.expander("生成任务与失败记录"):
             jobs = queries.generation_jobs(repo, product_id)
-            st.dataframe(jobs, hide_index=True, width="stretch")
+            state_table(jobs)
             if any(j["state"] == "running" for j in jobs):
                 st.warning("存在运行中任务，可能正在处理或因程序中断遗留。请先核查，确需重试时返回“生成内容”再次明确点击；原任务保留。")
 
@@ -104,8 +113,7 @@ def render_content(repo, row, operator):
     content_id = row["id"]
     modes = {'template': '模板模式', 'deepseek': 'DeepSeek', 'qwen': '通义千问', 'manual': '人工编辑'}
     st.caption(f"内容 #{content_id} · 修订 R{row['revision']} · {STATES[row['state']]} · {modes.get(row['mode'],row['mode'])} · {display_context(row['context'])}")
-    st.subheader(row["title"])
-    st.text(row["body"])
+    content_card(row['title'], row['body'], row['state'])
     basis = queries.content_basis(repo, row)
     valid = not basis["missing"] and basis["snapshot_hash"] == row["snapshot_hash"]
     body_issues = text_findings(row['title'], row['body'], basis['snapshot']) if not basis['missing'] else []
@@ -125,7 +133,7 @@ def render_content(repo, row, operator):
         snapshot = json.loads(row["snapshot_json"])
         st.json(snapshot)
         st.caption("快照 SHA-256：" + row["snapshot_hash"])
-        st.dataframe(queries.content_evidence(repo, content_id), hide_index=True, width="stretch")
+        state_table(queries.content_evidence(repo, content_id))
         st.dataframe(queries.content_reviews(repo, content_id), hide_index=True, width="stretch")
         st.dataframe(queries.content_exports(repo, content_id), hide_index=True, width="stretch")
     if row["state"] == "draft":
@@ -145,6 +153,7 @@ def render_content(repo, row, operator):
                     if ok:
                         st.rerun()
     if row["state"] == "ready" and valid:
+        st.caption(f"本次下载仅包含当前内容 #{content_id} / R{row['revision']}，会保留一条导出记录；不会自动发布到外部平台。")
         from views.access_view import download_guard
         guard = download_guard()
         def checked_export():

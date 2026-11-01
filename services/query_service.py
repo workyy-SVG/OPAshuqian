@@ -93,3 +93,8 @@ def dated_candidates(repo: Repository, product_id: int) -> list[Row]:
     rows = repo.all("SELECT * FROM observations WHERE product_id=? AND state='pending' AND effective_from!='' ORDER BY effective_from,id", (product_id,))
     today = today_iso()
     return [{**r, 'availability': 'future' if r['effective_from'] > today else 'due'} for r in rows]
+
+
+def dependent_content_count(repo: Repository, fact_id: int) -> int:
+    row = repo.one('SELECT COUNT(*) AS total FROM content_dependencies WHERE fact_revision_id=?', (fact_id,))
+    return int(row['total']) if row else 0

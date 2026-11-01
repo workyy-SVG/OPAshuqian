@@ -8,6 +8,8 @@ from services.content_service import generate_content, edit_content
 from views.common import STATES, action, display_value, fact_table, display_context
 from views.guidance import next_button, navigate
 from services import query_service as queries
+from views.components import content_card, empty_state, state_table
+from html import escape
 
 
 def open_review(content_id):
@@ -17,8 +19,7 @@ def open_review(content_id):
 
 def render(repo, product_id, operator):
     if not product_id:
-        st.info('请先导入产品资料，再生成可追踪的内容。')
-        next_button('去准备资料', '产品资料', 'impact:import')
+        empty_state('资料变化，会在这里留下轨迹', '先导入并生成一份内容，再修订其依据即可体验。', '去准备资料', '产品资料', 'impact:import')
         return
     rows = impact_worklist(repo, product_id)
     labels = {'needs_update': '待更新正文', 'needs_review': '新修订待审核', 'resolved': '本次变更已处理'}
@@ -27,17 +28,21 @@ def render(repo, product_id, operator):
     st.caption('按每份内容的最新修订统计。旧版本保留原始依据，可展开查看历史。')
     include_resolved = st.checkbox('查看已处理记录', value=False, key='include_resolved_impacts')
     if not rows:
-        st.info('还没有需要复查的变化。先生成一份内容，再修订其依据即可体验变更追踪。')
+        empty_state('暂时没有需要复查的内容', '先完成内容审核；之后调价或纠错时，这里会指出哪些文案需要更新。')
     elif all(r['resolution'] == 'resolved' for r in rows):
         st.success('当前关联内容的最新修订均已审核通过。请使用新文件替换外部已发布内容。')
     for row in rows:
         if row['resolution'] == 'resolved' and not include_resolved:
             continue
         with st.expander(f"{CONTENT_TYPES[row['content_type']]} · R{row['revision']} · {labels[row['resolution']]}", expanded=True):
-            st.write(row['body'])
-            st.dataframe([{'变化字段': FIELDS[t['changed_field']], '适用范围': display_context(t['changed_context']),
-                '原依据': display_value(t['changed_field'], t['old_value']), '新依据': display_value(t['changed_field'], t['new_value']),
-                '变更原因': t['change_reason']} for t in row['triggers']], hide_index=True, width='stretch')
+            content_card(row['title'], row['body'], row['state'])
+            st.caption(f"本项涉及1份逻辑内容、{len(row['history'])}条历史修订；以下变化需要逐项复查。")
+            for trigger in row['triggers']:
+                field = trigger['changed_field']
+                old = escape(str(display_value(field,trigger['old_value'])))
+                new = escape(str(display_value(field,trigger['new_value'])))
+                st.markdown(f'<div class="qp-timeline"><strong>{escape(FIELDS[field])} · {escape(display_context(trigger["changed_context"]))}</strong>'
+                            f'<p>{old} → {new}</p><small>变更 #{trigger["event_id"]} · {escape(trigger["change_reason"])}</small></div>', unsafe_allow_html=True)
             if row['resolution'] == 'needs_review':
                 st.info('新修订已保存，完成审核后这项任务会显示为已处理。')
                 st.button('去审核这份新修订', key=f"review-impact:{row['id']}", on_click=open_review, args=(row['id'],), type='primary')
@@ -68,7 +73,7 @@ def render(repo, product_id, operator):
             with st.expander('追溯受影响的历史修订'):
                 for old in row['history']:
                     st.caption(f"内容 #{old['id']} / R{old['revision']} / {STATES[old['state']]}")
-                    st.text(old['body'])
+                    content_card(old['title'],old['body'],old['state'])
     st.subheader('当前确认资料')
     st.caption('需要调价或纠错时，先补录新来源，再到数据核对页确认。')
     next_button('去补录新的产品资料', '产品资料', 'impact:source')
@@ -78,6 +83,8 @@ def render(repo, product_id, operator):
             mapping = {r['id']: r for r in facts}
             chosen = st.selectbox('撤回目标', list(mapping), format_func=lambda i:
                 f"{FIELDS[mapping[i]['field']]} · {display_context(mapping[i]['context'])} · #{i}")
+            affected = queries.dependent_content_count(repo, chosen)
+            st.warning(f'撤回将影响 {affected} 份内容修订；这些内容需重新核对后才可导出。历史资料会保留。')
             with st.form('withdraw'):
                 reason = st.text_input('撤回原因')
                 checked = st.checkbox('确认撤回，并将依赖此修订的内容标为待复查')
@@ -90,5 +97,5 @@ def render(repo, product_id, operator):
                         if ok:
                             st.rerun()
     with st.expander('完整字段修订与变更事件'):
-        st.dataframe(queries.fact_history(repo, product_id), hide_index=True, width='stretch')
+        state_table(queries.fact_history(repo, product_id))
         st.dataframe(queries.change_history(repo, product_id), hide_index=True, width='stretch')

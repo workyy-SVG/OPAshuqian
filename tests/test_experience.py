@@ -43,3 +43,49 @@ def test_first_visit_guide_loads_sample_but_never_confirms(tmp_path, monkeypatch
     from config import Settings
     repo = Repository(Settings(tmp_path,tmp_path/'qianpin.sqlite3'))
     assert repo.products() and not repo.all('SELECT * FROM fact_revisions')
+
+
+def test_candidate_card_requires_explicit_exclusion_acknowledgement(tmp_path, monkeypatch):
+    monkeypatch.setenv('QIANPIN_RUNTIME_DIR', str(tmp_path))
+    monkeypatch.delenv('QIANPIN_DB_PATH', raising=False)
+    app = AppTest.from_file(str(ROOT/'app.py'), default_timeout=20).run()
+    app.button(key='welcome_import').click().run()
+    app.text_input(key='operator').set_value('体验测试员').run()
+    from repository import Repository
+    from config import Settings
+    repo = Repository(Settings(tmp_path,tmp_path/'qianpin.sqlite3'))
+    selected = app.selectbox(key='selected_product').value
+    bad = repo.one("SELECT * FROM observations WHERE product_id=? AND normalized='250'", (selected,))
+    app.button(key=f'exclude-card:{bad["id"]}').click().run()
+    next(t for t in app.text_input if t.label=='核对依据 / 处理原因').set_value('包装为200g，250g为拟制误录')
+    next(b for b in app.button if b.label=='保存本次处理').click().run()
+    assert not app.exception
+    assert repo.one('SELECT state FROM observations WHERE id=?',(bad['id'],))['state']=='pending'
+    assert any('勾选排除确认' in w.value for w in app.warning)
+    next(c for c in app.checkbox if c.label.startswith('确认排除此项')).check()
+    next(b for b in app.button if b.label=='保存本次处理').click().run()
+    assert not app.exception
+    assert repo.one('SELECT state FROM observations WHERE id=?',(bad['id'],))['state']=='excluded'
+    assert not repo.all('SELECT * FROM fact_revisions')
+
+
+def test_impact_timeline_and_dependency_scope(repo, monkeypatch):
+    from tests.conftest import confirmed
+    from tests.test_content import ready
+    from services.import_service import add_manual
+    from services.fact_service import confirm_fact
+    from services import query_service as queries
+    monkeypatch.setenv('QIANPIN_RUNTIME_DIR', str(repo.settings.runtime_dir))
+    monkeypatch.setenv('QIANPIN_DB_PATH', str(repo.settings.db_path))
+    p = confirmed(repo)
+    cid = ready(repo,p)
+    old = repo.one("SELECT * FROM fact_revisions WHERE field='price_cent' AND state='current'")
+    assert queries.dependent_content_count(repo, old['id']) == 1
+    obs = add_manual(repo,p,'price_cent','14.00','retail','拟制新价目表','调价','体验测试员')
+    confirm_fact(repo,p,obs,old['id'],'体验测试员','已核对新价')
+    app = AppTest.from_file(str(ROOT/'app.py'), default_timeout=20).run()
+    app.radio(key='navigation').set_value('变更追踪').run()
+    assert not app.exception
+    assert any('12.00 元 → 14.00 元' in m.value for m in app.markdown)
+    assert any('撤回将影响' in w.value for w in app.warning)
+    assert repo.one('SELECT state FROM content_revisions WHERE id=?',(cid,))['state']=='stale'

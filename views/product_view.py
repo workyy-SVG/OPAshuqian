@@ -60,13 +60,15 @@ def render(repo, product_id, operator):
                         st.rerun()
         if product_id:
             with st.form("manual_observation"):
-                field = st.selectbox("字段", list(FIELDS), format_func=FIELDS.get)
-                raw = st.text_area("来源原文", help="重量可填200g或0.2kg；金额填写元，例如12.00。")
+                st.markdown('**1 · 填写包装或价目表上的信息**')
+                field = st.selectbox("字段", list(FIELDS), format_func=FIELDS.get, help='选择你要补充的一项产品信息，每次保存一项。')
+                raw = st.text_area("来源原文", placeholder='例如：200g、12.00，或包装上的配料说明', help="重量可填200g或0.2kg；金额填写元，例如12.00。")
                 scope = st.selectbox('适用范围', ['general', 'retail', 'wholesale'], format_func=display_context,
                                      help='名称、净含量和说明选通用资料；价格选零售或批发。')
                 custom_scope = st.text_input('其他价格渠道（可留空）', help='仅当价格属于其他渠道时填写，例如门店A。')
                 context = custom_scope.strip() if field == 'price_cent' and custom_scope.strip() else scope
-                source = st.text_input("来源说明", placeholder="例如包装标签、已核对价目表")
+                st.markdown('**2 · 标明来源与补录原因**')
+                source = st.text_input("来源说明", placeholder="例如包装标签、已核对价目表", help='帮助之后的审核人追溯这项说法从哪里来。')
                 effective = st.text_input("适用日期（可留空）", placeholder="YYYY-MM-DD")
                 reason = st.text_input("补录原因")
                 if st.form_submit_button("保存为待确认候选", type="primary"):
@@ -79,7 +81,12 @@ def render(repo, product_id, operator):
             st.dataframe(sources, hide_index=True, width="stretch")
             source_id = st.selectbox("查看批次", [s["id"] for s in sources], format_func=lambda i: f"批次 {i}")
             observations = queries.source_observations(repo, source_id)
-            st.dataframe([{**r, "state": STATES.get(r["state"], r["state"])} for r in observations], hide_index=True, width="stretch")
+            from views.components import state_table
+            status_filter = st.selectbox('来源记录状态', ['全部']+list(dict.fromkeys(r['state'] for r in observations)),
+                                         format_func=lambda v:STATES.get(v,v))
+            filtered = [r for r in observations if status_filter=='全部' or r['state']==status_filter]
+            with st.expander(f'记录明细 · {len(filtered)} 条', expanded=False):
+                state_table(filtered)
             source = queries.source_record(repo, source_id)
             from pathlib import Path
             path = Path(source["stored_path"])
