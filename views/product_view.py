@@ -10,8 +10,7 @@ from services import query_service as queries
 
 def render(repo, product_id, operator):
     st.write("先选择一种收集方式；保存后进入待确认候选，人工核对后才用于生成。")
-    from views.tutorial_view import flow_diagram
-    flow_diagram([('选择来源','按分类选商品、上传CSV，或手动补录'),('预览并保存','确认SKU、版本和原文，保存为候选'),('去数据核对','对照可靠来源，逐项确认资料')])
+    st.caption('收集来源 → 预览并保存 → 检查候选 → 进入数据核对')
     st.subheader('① 收集与保存资料')
     tabs = st.tabs(["公开食品资料", "CSV 导入", "手动补录", "来源与历史"])
     with tabs[1]:
@@ -31,7 +30,7 @@ def render(repo, product_id, operator):
                     bundle.writestr(path.name, path.read_bytes())
                 bundle.writestr('详细使用说明.md', (ROOT / 'docs/USER_GUIDE.md').read_bytes())
             st.download_button('下载分步体验资料包', pack.getvalue(), '黔品智营分步体验.zip', 'application/zip')
-            if st.button("导入拟制演示样例", key="import_sample"):
+            if st.button("加载可选测试资料", key="import_sample", help='这些资料为拟制测试数据，不会自动确认任何事实。'):
                 preview = preview_import((ROOT / "samples/products.csv").read_bytes())
                 ok, result = action(lambda: commit_import(repo, preview, "拟制演示样例.csv"), "拟制样例已导入，请到数据核对页处理净含量冲突。")
                 if ok:

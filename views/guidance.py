@@ -10,7 +10,7 @@ MODULES = {
         'steps': [('先看冲突', '先处理不同值的候选，200g与0.2kg属于等价表述。'), ('记录取舍', '排除误录后，选择要采用的候选并填写核对依据。'), ('确认后生成', '名称和净含量确认齐全后，就能去生成内容。')],
         'tips': ['拟制样例的250g是误录：先排除它，再确认200g。实际资料以你的核查为准。', '确认时需填写侧栏操作人和本次依据，不按文件上传时间自动选值。', '调价时采纳新价格即可，旧确认值会保留为历史。']},
     '内容工作台': {'number': '03', 'tag': '内容协同', 'summary': '用确认资料组织文案，经过审核后再用于对外发布。',
-        'steps': [('选择生成依据', '选内容类型和价格渠道，右侧核对本次资料。'), ('生成并核对', '模板无需密钥；双模型模式需本机配置，均要人工核对。'), ('审核与下载', '在审核与历史中提交审核，通过后下载TXT。')],
+        'steps': [('选择生成依据', '选内容类型和价格渠道，右侧核对本次资料。'), ('生成并核对', '模板无需密钥；双模型模式需本机配置，均要人工核对。'), ('审核与下载', '在审核与导出中提交审核，通过后下载TXT。')],
         'tips': ['希望体验调价追踪，请勾选加入价格，并保持零售渠道一致。', '手动编辑会产生新修订；名称、净含量、金额明显不一致时会拦截审核与导出。', '规则无法理解全部文字含义，配料、功效等仍需逐句人工核对。']},
     '变更追踪': {'number': '04', 'tag': '更新维护', 'summary': '资料变了，找到需要复查的文案，让更新有始有终。',
         'steps': [('查看变化', '核对变化字段、原依据、新依据和关联文案。'), ('更新正文', '按当前资料生成新修订，或手动修改并重绑依据。'), ('完成重审', '回到内容工作台审核新修订，再替换外部旧内容。')],
@@ -78,13 +78,15 @@ def workspace_header(page, product=None, progress=None):
              '内容工作台':('使用确认资料生成草稿，人工审核后下载','变更追踪'),
              '变更追踪':('检查变化影响，更新关联文案并重新审核','内容工作台')}
     goal, following = goals[page]
-    st.caption(f'本页目标：{goal}。完成后进入：{following}。')
-    for col, name in zip(st.columns(4), MODULES):
-        with col:
-            done = bool(progress and progress['steps'][list(MODULES).index(name)])
-            st.markdown(f'<div class="qp-step-{"current" if name==page else "idle"}">{"✓ 已完成" if done else "● 当前环节" if name==page else "○ 待进行"}</div>', unsafe_allow_html=True)
-            st.button(f"{MODULES[name]['number']} · {name}", key='step:'+name, type='primary' if name == page else 'secondary',
-                      on_click=navigate, args=(name,), width='stretch')
+    st.caption(f'本页目标：{goal}。'+('下载后完成本轮工作；后续调价或纠错再进入变更追踪。' if page=='内容工作台' else f'完成后进入：{following}。'))
+    st.markdown(' → '.join(f"**{m['number']} {name}（当前）**" if name==page else f"{m['number']} {name}" for name,m in MODULES.items()))
+    with st.expander('查看流程进度与跨模块跳转',expanded=False):
+        for col, name in zip(st.columns(4), MODULES):
+            with col:
+                done = bool(progress and progress['steps'][list(MODULES).index(name)])
+                st.caption('✓ 已完成' if done else '● 当前环节' if name==page else '○ 待进行')
+                st.button(f"{MODULES[name]['number']} · {name}", key='step:'+name, type='primary' if name == page else 'secondary',
+                          on_click=navigate, args=(name,), width='stretch')
     if st.session_state.get('show_module_guide', True):
         with st.expander('本模块怎么用 · 三步上手', expanded=False):
             for i, (col, (title, description)) in enumerate(zip(st.columns(3), module['steps']), 1):
