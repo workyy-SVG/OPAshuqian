@@ -1,5 +1,6 @@
 """Explicit search and preview; no network calls merely from opening a tab."""
 import streamlit as st
+from config import FIELDS
 
 from repository import BusinessError
 from services.food_facts_service import lookup, candidate_preview, import_product, ATTRIBUTION
@@ -46,7 +47,7 @@ def render(repo):
             version = st.text_input('产品版本', value='V1', max_chars=80)
             try:
                 preview = candidate_preview(product, sku, version)
-                st.dataframe([{'字段': row['field_key'], '来源原文': row['raw_value'],
+                st.dataframe([{'字段': FIELDS[row['field_key']], '来源原文': row['raw_value'],
                                '格式问题': row['error']} for row in preview['rows']], hide_index=True, width='stretch')
                 invalid = any(row['error'] for row in preview['rows'])
             except BusinessError as exc:

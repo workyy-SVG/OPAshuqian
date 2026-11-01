@@ -44,17 +44,39 @@ def apply_theme():
     .qp-step-no {color:#a46b2b;font-size:12px;letter-spacing:.1em;margin-bottom:4px;}
     .qp-step-title {font-weight:650;color:#244e39;margin-bottom:6px;font-size:16px;}
     .qp-step-copy {font-size:13px;line-height:1.7;color:#627260;}
+    :root {--qp-ink:#193d30;--qp-muted:#52645b;--qp-brand:#267562;--qp-line:#d6e1d4;--qp-radius:16px;--qp-space:16px;}
+    button, input, textarea, [data-baseweb="select"] {font-family:inherit!important;}
+    .stButton button,.stDownloadButton button,.stLinkButton a {border-radius:12px;min-height:44px;font-weight:600;}
+    .stTextInput input,.stTextArea textarea,[data-baseweb="select"]>div {border-radius:10px;}
+    button:focus-visible,input:focus-visible,textarea:focus-visible,a:focus-visible {outline:3px solid #1e40af!important;outline-offset:3px;}
+    [data-baseweb="tab-list"] {gap:8px;border-bottom:1px solid var(--qp-line);flex-wrap:wrap;}
+    [data-baseweb="tab"] {padding:12px 16px;border-radius:12px 12px 0 0;min-height:44px;}
+    [aria-selected="true"][role="tab"] {background:#e1eee5;color:#174b37;font-weight:700;}
+    [data-testid="stDataFrame"] {border:1px solid var(--qp-line);border-radius:12px;}
+    [data-testid="stAlert"] {border-radius:12px;}
+    .qp-badge {display:inline-block;padding:5px 11px;border-radius:24px;font-weight:650;font-size:13px;line-height:1.5;}
+    .qp-content-card {background:white;border:1px solid var(--qp-line);border-radius:var(--qp-radius);padding:24px;margin:12px 0 20px;}
+    .qp-prose {white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.85;font-family:inherit;font-size:16px;color:#24352e;}
+    .qp-empty {padding:28px;text-align:center;border:1px dashed #9aafa0;border-radius:var(--qp-radius);background:#fff;}
+    .qp-empty>span {font-size:36px;color:#267562;}.qp-empty p {color:var(--qp-muted);}
+    .qp-timeline {border-left:3px solid #8bb5a0;margin:12px 0;padding:6px 0 6px 20px;}
+    .qp-timeline p {margin:6px 0;overflow-wrap:anywhere;}.qp-timeline small {color:var(--qp-muted);}
+    .qp-step-current {padding:7px 10px;border-radius:10px;background:#dcfce7;color:#14532d;font-weight:700;}
+    .qp-step-idle {padding:7px 10px;color:#334155;}
+    @media(max-width:700px){.qp-content-card{padding:16px}.qp-prose{font-size:15px}[data-testid="stHorizontalBlock"]{flex-wrap:wrap}[data-testid="stColumn"]{min-width:min(100%,240px);flex:1 1 240px}.qp-hero p{max-width:100%}}
     @media(max-width:700px){.block-container{padding-top:1.4rem}.qp-hero{padding:22px}.qp-hero h1{font-size:28px}.qp-hero p{max-width:100%}}
     </style>''', unsafe_allow_html=True)
 
 
-def workspace_header(page, product=None):
+def workspace_header(page, product=None, progress=None):
     module = MODULES[page]
     context = f"{product['sku']} / {product['version']}" if product else '从导入第一份资料开始'
     st.markdown(f'''<section class="qp-hero"><div class="qp-eyebrow">黔品智营 / {module['tag']} / {module['number']}</div>
         <h1>{page}</h1><p>{module['summary']}</p><span class="qp-context">{escape(context)}</span></section>''', unsafe_allow_html=True)
     for col, name in zip(st.columns(4), MODULES):
         with col:
+            done = bool(progress and progress['steps'][list(MODULES).index(name)])
+            st.markdown(f'<div class="qp-step-{"current" if name==page else "idle"}">{"✓ 已完成" if done else "● 当前环节" if name==page else "○ 待进行"}</div>', unsafe_allow_html=True)
             st.button(f"{MODULES[name]['number']} · {name}", key='step:'+name, type='primary' if name == page else 'secondary',
                       on_click=navigate, args=(name,), width='stretch')
     if st.session_state.get('show_module_guide', True):
@@ -66,3 +88,20 @@ def workspace_header(page, product=None):
                 for tip in module['tips']:
                     st.write('• ' + tip)
     st.write('')
+
+
+def product_overview(progress):
+    from views.components import status_badge, glossary
+    st.caption('当前产品概览 · 生成必需资料为名称与净含量；价格按需要核对对应渠道。')
+    cols = st.columns(4)
+    cols[0].metric('必需资料已确认', f"{progress['confirmed']}/2")
+    cols[1].metric('冲突字段', progress['conflicts'])
+    cols[2].metric('待核对字段组', progress['pending'])
+    with cols[3]:
+        st.caption('最近内容状态')
+        if progress['latest']:
+            status_badge(progress['latest'])
+        else:
+            st.write('尚未生成')
+    st.progress(progress['confirmed']/2, text=f"生成必需资料完成度 {progress['confirmed']*50}%")
+    glossary()
