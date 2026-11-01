@@ -81,10 +81,11 @@ def candidate_preview(product: dict[str, Any], sku: str, version: str) -> dict[s
     values = {'product_name': product.get('product_name_zh') or product.get('product_name'),
               'ingredients_text': product.get('ingredients_text_zh') or product.get('ingredients_text')}
     quantity = product.get('quantity')
-    if isinstance(quantity, str) and re.fullmatch(r'\d+(?:\.\d+)?\s*(?:mg|kg|毫克|千克|公斤|g|克|斤|两)', quantity.strip(), re.I):
+    weight = re.fullmatch(r'(\d+(?:\.\d+)?\s*(?:mg|kg|毫克|千克|公斤|g|克|斤|两))\s*[e℮]?', quantity.strip(), re.I) if isinstance(quantity, str) else None
+    if weight:
         try:
-            normalize_weight(quantity)
-            values['net_weight_g'] = quantity
+            normalize_weight(weight[1])
+            values['net_weight_g'] = weight[1]
         except ValueError:
             pass
     output = io.StringIO(newline='')

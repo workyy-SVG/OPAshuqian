@@ -102,6 +102,8 @@ def test_preview_preserves_leading_zeros_and_skips_volume():
     assert len(food.candidate_preview(p, '0001', 'V1')['rows']) == 2
     with pytest.raises(BusinessError):
         food.candidate_preview({'code': '12345678'}, '0001', 'V1')
+    p['quantity'] = '400 g e'
+    assert next(r for r in food.candidate_preview(p,'0001','V1')['rows'] if r['field_key']=='net_weight_g')['normalized'] == '400'
 
 
 def test_import_is_pending_idempotent_and_preserves_snapshot(repo):
@@ -121,6 +123,11 @@ def test_import_is_pending_idempotent_and_preserves_snapshot(repo):
         confirm_fact(repo, row['product_id'], row['id'], None, '测试员', '已核对包装')
     assert len(repo.all('SELECT * FROM fact_revisions')) == 3
     assert {r['field_key'] for r in preview['rows']} == {'product_name','net_weight_g','ingredients_text'}
+    from tests.test_content import ready
+    from services.content_service import export_content
+    # Price is optional for this demonstration and must never be invented by OFF.
+    cid = ready(repo, rows[0]['product_id'], include_price=False)
+    assert '公开食品测试' in export_content(repo, cid, '测试员')['text']
 
 
 def test_ui_search_to_candidate_import(tmp_path, monkeypatch):

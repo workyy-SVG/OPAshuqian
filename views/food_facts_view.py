@@ -22,6 +22,7 @@ def render(repo):
         submitted = st.form_submit_button('查询公开商品资料', type='primary')
     if submitted:
         st.session_state.pop('food_results', None)
+        st.session_state.pop('food_selected', None)
         try:
             with st.spinner('正在查询 Open Food Facts…'):
                 st.session_state['food_results'] = cached_lookup(query.strip(), kind)

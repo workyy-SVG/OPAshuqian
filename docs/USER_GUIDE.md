@@ -170,3 +170,7 @@ $env:QIANPIN_RUNTIME_DIR = "$PWD/runtime/walkthrough-new"
 - 没有修改另一SKU或另一产品版本的事实。
 
 完成这些动作，就体验了当前首版最核心的数据治理与内容维护流程。
+# 公开食品资料新入口
+
+现在可在“产品资料 → 公开食品资料”按条码或名称查询，预览并导入待确认候选，详见[五分钟演示流程](OPEN_FOOD_FACTS.md)。该流程无需新增API Key；已有CSV体验流程继续保留。
+

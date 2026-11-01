@@ -92,6 +92,24 @@ def render(repo, product_id, operator):
                     guard()
                     return path.read_bytes()
                 st.download_button("下载本批原始资料", read_source, f"source-{source_id}.csv", "text/csv")
+            import re
+            snapshots = {match[1] for row in observations
+                         if (match := re.fullmatch(r'https://world\.openfoodfacts\.org/product/[0-9]{8,14}#snapshot=([a-f0-9]{64})', row['source_locator']))}
+            for digest in sorted(snapshots):
+                snapshot_path = repo.settings.runtime_dir / 'sources' / f'off-{digest}.json'
+                if snapshot_path.is_file():
+                    from views.access_view import download_guard
+                    snapshot_guard = download_guard()
+                    def read_snapshot(path=snapshot_path, expected=digest, guard=snapshot_guard):
+                        import hashlib
+                        from repository import BusinessError
+                        guard()
+                        payload = path.read_bytes()
+                        if hashlib.sha256(payload).hexdigest() != expected:
+                            raise BusinessError('来源快照校验失败。')
+                        return payload
+                    st.download_button('下载食品来源JSON快照', read_snapshot,
+                                       f'OpenFoodFacts-{digest[:12]}.json', 'application/json', key=f'off-snapshot:{digest}')
             errors = [r for r in observations if r["state"] == "error"]
             if errors:
                 buffer = io.StringIO(newline="")

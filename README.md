@@ -2,7 +2,9 @@
 
 面向地方特色食品小微品牌的产品资料核对与内容协同工具。按实施手册实现 Python 3.13、Streamlit、SQLite 本地单体应用，支持DeepSeek、通义千问及无需密钥的模板模式。
 
-**当前状态：按技术优化清单完成迁移、缓存、登录保护、日志、查询分层、单位校验、提示词版本与带哈希构建。69项本地测试通过，核心覆盖率92.37%，静态检查通过；Windows、Linux、macOS及Docker检查已恢复成功。真实模型调用与实际公网HTTPS部署仍需单独验收。**
+**当前状态：已接入Open Food Facts条码查询与名称搜索，公开资料预览后进入待确认候选，保留来源与JSON快照。80项本地测试通过，核心覆盖率92.64%，静态检查通过；各次推送的CI结果见GitHub Actions。真实模型调用仍需单独验收。**
+
+学生演示从[公开食品资料五分钟流程](docs/OPEN_FOOD_FACTS.md)开始。入口为“产品资料 → 公开食品资料”，无需新增API Key；名称、重量、配料核对确认后可直接用模板完成审核导出。网络不可用时继续使用CSV拟制样例。
 
 逐项处理结果见[18项清单实施记录](docs/CHECKLIST_IMPLEMENTATION.md)，认证配置和升级恢复见[部署说明](docs/DEPLOYMENT.md)。PostgreSQL迁移与开放多品牌入驻保留为按需路线图。
 
@@ -12,7 +14,7 @@
 
 | 页面 | 可完成的工作 |
 | --- | --- |
-| 产品资料 | CSV 预览与导入、明确选择编码、错误行下载、手动补录、产品版本与来源历史 |
+| 产品资料 | 公开食品条码/名称查询、候选预览、CSV导入、错误行与来源快照下载、手动补录、版本与历史 |
 | 数据核对 | 按产品与渠道核对缺失和冲突、排除误录、重新分配、人工确认、查看处理依据 |
 | 内容工作台 | 两类内容、可选价格与说明字段、模板或 DeepSeek 生成、保存快照、编辑新修订、审核与 TXT 导出 |
 | 变更追踪 | 查看变化影响、撤回事实、模板重写或正文沿用并重绑新依据、保留历史 |
@@ -40,7 +42,7 @@ uv venv --python 3.13 .venv
 uv pip install --python .venv/Scripts/python.exe --require-hashes --only-binary :all: -r requirements-lock.txt
 ```
 
-Linux / macOS 使用 `python3.13 -m venv .venv`，后续解释器路径改为 `.venv/bin/python`。本机验证平台为 Windows；[Windows 与 Linux CI 已通过](https://github.com/workyy-SVG/OPAshuqian/actions/runs/41188485804)，macOS 尚未验证。
+Linux / macOS 使用 `python3.13 -m venv .venv`，后续解释器路径改为 `.venv/bin/python`。本机验证平台为Windows；Windows、Linux、macOS及Docker均已在此前CI中验证，最新结果见[Actions](https://github.com/workyy-SVG/OPAshuqian/actions)。
 
 ## 第一次体验
 

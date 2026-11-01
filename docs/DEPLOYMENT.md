@@ -56,7 +56,7 @@ docker compose logs --tail 80 web
 
 runtime持久挂载；升级已有数据库前程序会生成pre-migration备份。对外访问在宿主机配置HTTPS反向代理到127.0.0.1:8501，保留应用登录。不要将容器端口直接公开为无需HTTPS的业务入口。
 
-当前已经通过GitHub上的Linux镜像构建、容器内认证/迁移/单位测试和健康端点检查；实际域名、证书与公网网络尚未配置，不能视为已经完成线上部署。
+当前已经通过GitHub上的Linux镜像构建、容器内认证/迁移/单位测试和健康端点检查；自建Docker服务的域名、证书与公网网络尚未配置。现有Streamlit Community Cloud应用的更新方式与公开食品演示流程见[说明](OPEN_FOOD_FACTS.md)。
 
 ## 迁移、恢复和日志
 
