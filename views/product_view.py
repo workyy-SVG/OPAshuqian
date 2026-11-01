@@ -11,7 +11,7 @@ from services import query_service as queries
 def render(repo, product_id, operator):
     st.write("先选择一种收集方式；保存后进入待确认候选，人工核对后才用于生成。")
     from views.tutorial_view import flow_diagram
-    flow_diagram([('1 选择来源','按分类选商品、上传CSV，或手动补录'),('2 预览并保存','确认SKU、版本和原文，保存为候选'),('3 去数据核对','对照可靠来源，逐项确认资料')])
+    flow_diagram([('选择来源','按分类选商品、上传CSV，或手动补录'),('预览并保存','确认SKU、版本和原文，保存为候选'),('去数据核对','对照可靠来源，逐项确认资料')])
     tabs = st.tabs(["公开食品资料", "CSV 导入", "手动补录", "来源与历史"])
     with tabs[1]:
         st.subheader('上传你已有的产品资料')
