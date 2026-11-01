@@ -47,11 +47,17 @@ def lookup(query: str, kind: str = 'barcode') -> list[dict[str, Any]]:
     params = {'fields': FIELDS, 'lc': 'zh'}
     if kind == 'name':
         params.update(search_terms=query, search_simple='1', action='process', json='1', page_size='5')
+    data = _request(url, params)
+    products = [data.get('product')] if kind == 'barcode' else data.get('products', [])
+    return _products(products, 5)
+
+
+def _request(url: str, params: dict[str, str]) -> dict[str, Any]:
     try:
         with requests.get(url, params=params, headers={'User-Agent': USER_AGENT}, timeout=(5, 15),
                           stream=True, allow_redirects=False) as response:
             if response.status_code == 404:
-                return []
+                return {}
             if response.status_code == 429:
                 raise BusinessError('数据源查询限流，请稍后再试或使用CSV演示。', 'food_rate_limit')
             if response.status_code != 200:
@@ -68,10 +74,44 @@ def lookup(query: str, kind: str = 'barcode') -> list[dict[str, Any]]:
         raise BusinessError('查询失败或超时，请稍后重试；CSV导入仍可使用。', 'food_network') from exc
     if not isinstance(data, dict):
         raise BusinessError('数据源返回格式异常。', 'food_response')
-    products = [data.get('product')] if kind == 'barcode' else data.get('products', [])
+    return data
+
+
+def _products(products: Any, limit: int) -> list[dict[str, Any]]:
     if not isinstance(products, list):
         raise BusinessError('数据源返回格式异常。', 'food_response')
-    return [p for p in products[:5] if isinstance(p, dict) and re.fullmatch(r'[0-9]{8,14}', str(p.get('code', '')))]
+    return [p for p in products[:limit] if isinstance(p, dict) and re.fullmatch(r'[0-9]{8,14}', str(p.get('code', '')))]
+
+
+CATEGORIES = {
+    '熟食': {'即食餐食':'en:prepared-meals'},
+    '水饮': {'饮料与饮用水':'en:beverages'},
+    '生鲜': {'果蔬':'en:fruits-and-vegetables','肉类':'en:meats','蛋类':'en:eggs','水产':'en:seafood'},
+    '零食': {'休闲零食':'en:snacks'},
+    '乳品': {'乳制品':'en:dairies'},
+    '调味品': {'酱料与调味':'en:condiments'},
+}
+PAGE_SIZE = 12
+
+
+def browse(category: str, subcategory: str, page: int = 1) -> dict[str, Any]:
+    if category not in CATEGORIES or subcategory not in CATEGORIES[category]:
+        raise BusinessError('请选择目录中的分类。')
+    if isinstance(page, bool) or not isinstance(page, int) or not 1 <= page <= 1000:
+        raise BusinessError('目录页码须在1至1000之间，请缩小分类范围。')
+    _reserve('name')
+    params = {'categories_tags':CATEGORIES[category][subcategory],
+              'page_size':str(PAGE_SIZE),'page':str(page),'fields':FIELDS}
+    data = _request(f'{BASE}/api/v2/search', params)
+    raw = data.get('products', [])
+    products = _products(raw, PAGE_SIZE)
+    count = data.get('count')
+    try:
+        total = max(0,int(count)) if count is not None else None
+    except (ValueError, TypeError, OverflowError):
+        total = None
+    has_next = page*PAGE_SIZE < total if total is not None else isinstance(raw,list) and len(raw)>=PAGE_SIZE
+    return {'products':products,'page':page,'total':total,'has_next':has_next}
 
 
 def candidate_preview(product: dict[str, Any], sku: str, version: str) -> dict[str, Any]:

@@ -9,9 +9,13 @@ from services import query_service as queries
 
 
 def render(repo, product_id, operator):
-    st.write("先保留来源，再核对事实。上传成功的资料会进入候选区，确认后才用于内容。")
-    tabs = st.tabs(["CSV 导入", "手动补录", "来源与历史", "公开食品资料"])
-    with tabs[0]:
+    st.write("先选择一种收集方式；保存后进入待确认候选，人工核对后才用于生成。")
+    from views.tutorial_view import flow_diagram
+    flow_diagram([('1 选择来源','按分类选商品、上传CSV，或手动补录'),('2 预览并保存','确认SKU、版本和原文，保存为候选'),('3 去数据核对','对照可靠来源，逐项确认资料')])
+    tabs = st.tabs(["公开食品资料", "CSV 导入", "手动补录", "来源与历史"])
+    with tabs[1]:
+        st.subheader('上传你已有的产品资料')
+        st.caption('适合已有商品清单：下载模板 → 按行填写 → 上传预览 → 确认导入。')
         col1, col2 = st.columns([3, 1])
         with col1:
             upload = st.file_uploader("上传长表 CSV", type=["csv"], help="最大5MB、最多20000条；每行一条来源陈述，SKU按字符串处理。")
@@ -48,7 +52,8 @@ def render(repo, product_id, operator):
                                 f"批次 {result['source_id']}：候选 {result['candidates']}，重复 {result['duplicates']}，错误 {result['errors']}。")
                             st.rerun()
         st.caption("固定字段：product_name、net_weight_g、price_cent、ingredients_text、usage_text、storage_text。价格原文按元填写。")
-    with tabs[1]:
+    with tabs[2]:
+        st.subheader('逐项补充包装或价目表信息')
         with st.expander("新增 SKU / 产品版本", expanded=not product_id):
             with st.form("new_product"):
                 sku = st.text_input("SKU", placeholder="如 P001，保留前导零")
@@ -75,7 +80,8 @@ def render(repo, product_id, operator):
                     ok, _ = action(lambda: add_manual(repo, product_id, field, raw, context, source, reason, operator, effective), "候选已保存，请到数据核对页确认。")
                     if ok:
                         st.rerun()
-    with tabs[2]:
+    with tabs[3]:
+        st.subheader('查看资料来自哪里')
         sources = queries.sources(repo)
         if sources:
             st.dataframe(sources, hide_index=True, width="stretch")
@@ -132,13 +138,13 @@ def render(repo, product_id, operator):
                 st.download_button("下载错误行清单", read_errors, f"errors-{source_id}.csv", "text/csv")
         else:
             st.info("尚无导入记录。可先导入拟制演示样例。")
-    with tabs[3]:
+    with tabs[0]:
         from views.food_facts_view import render as render_food_facts
         render_food_facts(repo)
     if product_id:
         next_button('下一步：去核对并确认资料', '数据核对', 'product:quality')
-        st.subheader("当前已确认资料")
-        fact_table(repo, product_id)
+        with st.expander('当前已确认资料（生成使用这些信息）', expanded=False):
+            fact_table(repo, product_id)
 
 
 def action_preview(data, encoding):

@@ -24,6 +24,7 @@ def render(repo, product_id, operator):
     with create_tab:
         left, right = st.columns([3, 2])
         with left:
+            st.subheader('1 · 选择要生成的内容')
             content_type = st.radio("内容类型", list(CONTENT_TYPES), format_func=CONTENT_TYPES.get, horizontal=True)
             context = st.selectbox('价格渠道', available_channels(repo, product_id), format_func=display_context, key='generate_channel')
             include_price = st.checkbox("加入该渠道价格", value=any(f['field']=='price_cent' and f['context']==context for f in current),
@@ -31,6 +32,7 @@ def render(repo, product_id, operator):
             optional = st.multiselect("加入已确认的说明字段", ["ingredients_text", "usage_text", "storage_text"],
                                       default=["ingredients_text", "usage_text", "storage_text"], format_func=FIELDS.get)
             labels = {"template": "模板模式（不调用模型）", "deepseek": "DeepSeek 实时生成", "qwen": "通义千问实时生成"}
+            st.markdown('**2 · 选择生成方式**')
             mode = st.radio("生成方式", list(labels), format_func=labels.get, horizontal=True)
             configs = model_configs()
             cfg = configs.get(mode)
@@ -86,6 +88,8 @@ def render(repo, product_id, operator):
                 st.session_state["focused_content"] = result["content_id"]
                 st.rerun()
     with history_tab:
+        st.subheader('阅读正文 → 提交审核 → 逐句核对 → 下载')
+        st.caption('先选下方内容修订。审核与下载操作紧随正文，来源和历史保存在折叠详情中。')
         show_history = st.checkbox('包含历史修订', value=False, key='include_content_history')
         rows = queries.content_history(repo, product_id, show_history)
         if rows:

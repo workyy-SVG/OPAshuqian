@@ -22,6 +22,7 @@ def render(repo, product_id, operator):
         empty_state('资料变化，会在这里留下轨迹', '先导入并生成一份内容，再修订其依据即可体验。', '去准备资料', '产品资料', 'impact:import')
         return
     rows = impact_worklist(repo, product_id)
+    st.subheader('先看哪些内容需要更新，再处理并重审')
     labels = {'needs_update': '待更新正文', 'needs_review': '新修订待审核', 'resolved': '本次变更已处理'}
     for col, state in zip(st.columns(3), labels):
         col.metric(labels[state], sum(r['resolution'] == state for r in rows))
@@ -74,12 +75,20 @@ def render(repo, product_id, operator):
                 for old in row['history']:
                     st.caption(f"内容 #{old['id']} / R{old['revision']} / {STATES[old['state']]}")
                     content_card(old['title'],old['body'],old['state'])
-    st.subheader('当前确认资料')
+    with st.expander('需要调价或纠错？查看当前确认资料及撤回操作', expanded=False):
+        render_fact_actions(repo, product_id, operator)
+    with st.expander('完整字段修订与变更事件'):
+        state_table(queries.fact_history(repo, product_id))
+        st.dataframe(queries.change_history(repo, product_id), hide_index=True, width='stretch')
+
+
+def render_fact_actions(repo, product_id, operator):
     st.caption('需要调价或纠错时，先补录新来源，再到数据核对页确认。')
     next_button('去补录新的产品资料', '产品资料', 'impact:source')
     facts = fact_table(repo, product_id)
     if facts:
-        with st.expander('撤回一项确认资料'):
+        with st.container(border=True):
+            st.markdown('**仅在资料本身不再可靠时撤回**')
             mapping = {r['id']: r for r in facts}
             chosen = st.selectbox('撤回目标', list(mapping), format_func=lambda i:
                 f"{FIELDS[mapping[i]['field']]} · {display_context(mapping[i]['context'])} · #{i}")
@@ -96,6 +105,3 @@ def render(repo, product_id, operator):
                         ok, _ = action(lambda: withdraw_fact(repo, product_id, fact['field'], fact['context'], chosen, operator, reason))
                         if ok:
                             st.rerun()
-    with st.expander('完整字段修订与变更事件'):
-        state_table(queries.fact_history(repo, product_id))
-        st.dataframe(queries.change_history(repo, product_id), hide_index=True, width='stretch')

@@ -67,7 +67,8 @@ progress = overview(repo, product_id)
 if page != '使用教程':
     workspace_header(page, product_map.get(product_id), progress)
 if product_id and page == '产品资料':
-    product_overview(progress)
+    with st.expander('当前产品的完成情况', expanded=False):
+        product_overview(progress)
 from views import tutorial_view
 {
     "使用教程": tutorial_view.render,
