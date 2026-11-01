@@ -10,7 +10,7 @@ from services import query_service as queries
 
 def render(repo, product_id, operator):
     st.write("先保留来源，再核对事实。上传成功的资料会进入候选区，确认后才用于内容。")
-    tabs = st.tabs(["CSV 导入", "手动补录", "来源与历史"])
+    tabs = st.tabs(["CSV 导入", "手动补录", "来源与历史", "公开食品资料"])
     with tabs[0]:
         col1, col2 = st.columns([3, 1])
         with col1:
@@ -107,6 +107,9 @@ def render(repo, product_id, operator):
                 st.download_button("下载错误行清单", read_errors, f"errors-{source_id}.csv", "text/csv")
         else:
             st.info("尚无导入记录。可先导入拟制演示样例。")
+    with tabs[3]:
+        from views.food_facts_view import render as render_food_facts
+        render_food_facts(repo)
     if product_id:
         next_button('下一步：去核对并确认资料', '数据核对', 'product:quality')
         st.subheader("当前已确认资料")
