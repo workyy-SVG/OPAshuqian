@@ -60,38 +60,24 @@ def flow_diagram(nodes):
 
 def render(repo=None, product_id=None, operator=None):
     st.title('使用教程')
-    st.write('从“这个功能有什么用”到“具体点击哪里”，按模块查看。这里的演示不修改你的产品资料。')
-    flow_diagram([('产品资料','收集来源 → 待确认候选'),('数据核对','逐项判断 → 确认资料'),
-                  ('内容工作台','生成 → 人工审核 → TXT'),('变更追踪','资料变化 → 更新并重审')])
+    st.write('选择模块，看带标注的界面示意，再亲手点按钮观察结果。练习不修改业务资料。')
     topic = st.session_state.pop('next_tutorial_topic', None)
     if topic in LESSONS:
         st.session_state['tutorial_topic'] = topic
     topic = st.selectbox('想学习哪个模块？', list(LESSONS), key='tutorial_topic')
     lesson = LESSONS[topic]
-    st.subheader(topic+'：功能与作用')
-    st.info(lesson['purpose'])
-    left,right = st.columns(2)
-    left.markdown('**你需要准备**\n\n'+lesson['input'])
-    right.markdown('**完成后得到**\n\n'+lesson['output'])
-    st.subheader('照着做：具体操作步骤')
-    for i,(title,copy) in enumerate(lesson['steps'],1):
-        with st.container(border=True):
+    st.caption('这个模块的作用：'+lesson['purpose'])
+    from views.visual_tutorial import render as render_visual
+    render_visual(topic)
+    st.success('完成标志：'+lesson['done'])
+    next_button('去'+topic+'实际操作', topic, 'tutorial:practice:'+topic)
+    with st.expander('需要文字说明？查看完整步骤',expanded=False):
+        st.markdown('**准备：** '+lesson['input'])
+        st.markdown('**结果：** '+lesson['output'])
+        for i,(title,copy) in enumerate(lesson['steps'],1):
             st.markdown(f'**第{i}步 · {title}**')
             st.write(copy)
-    st.success('完成标志：'+lesson['done'])
-    st.caption('举例：'+lesson['example'])
-    next_button('去'+topic+'实际操作', topic, 'tutorial:practice:'+topic)
-    st.divider()
-    st.subheader('可视化练习：资料应该怎么选？')
-    scenario = st.radio('练习场景', ['同值不同单位','来源有冲突','没有可靠依据','资料变化后'], horizontal=True)
-    diagrams = {
-      '同值不同单位':[('来源A：200g','标准化为200克'),('来源B：0.2kg','也是200克，并非重量冲突'),('人工核查','对照包装，选择可靠来源确认')],
-      '来源有冲突':[('来源A：200g','与包装一致'),('来源B：250g','与包装不符（仅此练习设定）'),('先排除再确认','写原因排除250g，再采纳200g')],
-      '没有可靠依据':[('名称或重量缺失','不能猜测补齐'),('回资料页补录','查实物标签，保留来源'),('再回来确认','准备齐全后生成内容')],
-      '资料变化后':[('原价12元','旧文案含12元'),('确认新价14元','关联文案转为待复查'),('更新并重审','生成新修订，审核后下载')],
-    }
-    flow_diagram(diagrams[scenario])
-    st.caption('上方是教学示意，不代表系统替你核实了真实商品。')
+        st.caption('举例：'+lesson['example'])
     with st.expander('常见疑问：为什么导入了还不能生成？', expanded=False):
         st.write('导入只保存来源说法，人工确认后才能用于生成。名称与净含量必须确认；勾选加入价格时，还需确认对应渠道价格。')
         st.write('有不同候选时先核对来源并处理冲突；没有证据时先补录。不要为了消除提示随意选择一个值。')
