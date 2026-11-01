@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 from config import ROOT
 
-LATEST_SCHEMA_VERSION = 2
+LATEST_SCHEMA_VERSION = 3
 
 
 def execute_sql(db: sqlite3.Connection, text: str) -> None:

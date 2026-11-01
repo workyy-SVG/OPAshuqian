@@ -7,6 +7,7 @@ from services.fact_service import _snapshot, canonical, current_basis, snapshot_
 from services.llm_client import PROMPT_VERSION, ModelError, validate_result
 from services.text_check_service import assert_text_matches
 from services.audit_service import audited, model_audit_scope
+from services.quota_service import reserve_request
 
 
 def template_result(snapshot):
@@ -93,6 +94,8 @@ def generate_content(repo, product_id, request_key, context="retail", content_ty
         if mode == "template":
             output = {"result": template_result(snapshot), "attempts": 0, "usage": {}}
         elif client:
+            # Count every real outbound request, including transient retries.
+            client.before_request = lambda: reserve_request(repo, mode)
             with model_audit_scope(repo.settings.runtime_dir, job['id']):
                 output = client.generate_json(snapshot, PROMPT_VERSION)
         else:

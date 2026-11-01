@@ -6,6 +6,7 @@ from repository import BusinessError
 from services.fact_service import build_snapshot
 from services.content_service import template_result, generate_content
 from services.llm_client import DeepSeekClient, QwenClient, ModelError
+from services.quota_service import reserve_request, quota_status
 from tests.conftest import confirmed
 
 
@@ -99,3 +100,23 @@ def test_qwen_uses_official_endpoint_and_json_mode(repo):
     assert "thinking" not in kwargs["json"]
     job = repo.one("SELECT model,state FROM generation_jobs")
     assert job["model"] == "qwen-plus" and job["state"] == "succeeded"
+
+
+def test_daily_quota_is_separate_and_blocks_request_101(repo):
+    for _ in range(100):
+        reserve_request(repo, "deepseek")
+    status = quota_status(repo)
+    assert status["deepseek"]["used"] == 100 and status["deepseek"]["remaining"] == 0
+    assert status["qwen"]["used"] == 0 and status["qwen"]["remaining"] == 100
+    with pytest.raises(BusinessError) as err:
+        reserve_request(repo, "deepseek")
+    assert err.value.code == "daily_quota_exceeded"
+
+
+def test_transient_retry_counts_each_outbound_request(repo):
+    p = confirmed(repo)
+    snap = build_snapshot(repo, p)["snapshot"]
+    responses = iter([Response(status=429), Response(content=json.dumps(template_result(snap)))])
+    client = DeepSeekClient(ModelConfig(api_key="test"), lambda *a, **kw: next(responses), lambda _: None)
+    generate_content(repo, p, "two-counted-requests", mode="deepseek", client=client)
+    assert quota_status(repo)["deepseek"]["used"] == 2

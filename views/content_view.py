@@ -10,6 +10,7 @@ from views.common import STATES, action, display_value, model_configs, display_c
 from views.guidance import next_button
 from services.text_check_service import text_findings
 from services import query_service as queries
+from services.quota_service import quota_status
 
 
 def render(repo, product_id, operator):
@@ -31,6 +32,9 @@ def render(repo, product_id, operator):
             mode = st.radio("生成方式", list(labels), format_func=labels.get, horizontal=True)
             configs = model_configs()
             cfg = configs.get(mode)
+            quotas = quota_status(repo)
+            st.caption(f"今日 API 调用（北京时间）：DeepSeek {quotas['deepseek']['used']}/100 · "
+                       f"通义千问 {quotas['qwen']['used']}/100；每天 00:00 自动重置。")
             if mode == "template":
                 st.caption("模板按确认资料直接填充，用于验证流程；不计为真实模型调用。")
             elif not cfg.api_key:
@@ -56,7 +60,11 @@ def render(repo, product_id, operator):
                     st.warning("请先补齐或处理冲突：" + "、".join(FIELDS[f] for f in basis["missing"]))
                 if basis["conflicts"]:
                     st.warning("所选字段存在未解决冲突，请到数据核对页处理。")
-        disabled = not basis or bool(basis["missing"]) or (mode != "template" and not cfg.api_key)
+        quota_exhausted = mode in quotas and quotas[mode]["remaining"] <= 0
+        if quota_exhausted:
+            st.warning("所选模型今天的 100 次 API 调用额度已用完，请明天再试。")
+        disabled = (not basis or bool(basis["missing"]) or
+                    (mode != "template" and (not cfg.api_key or quota_exhausted)))
         if basis and basis['missing']:
             next_button('去补齐或核对资料', '数据核对', 'content:quality')
         if st.button("生成一份草稿", type="primary", disabled=disabled, key="generate_draft"):

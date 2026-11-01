@@ -46,7 +46,7 @@ class CompatibleModelClient:
     provider = "模型"
     allowed_endpoint = ""
 
-    def __init__(self, config, post=None, sleep=None, policy=None):
+    def __init__(self, config, post=None, sleep=None, policy=None, before_request=None):
         self.config = config
         self.post = post or requests.post
         self.sleep = sleep or time.sleep
@@ -54,6 +54,7 @@ class CompatibleModelClient:
             self.policy = policy or RetryPolicy.from_env()
         except ValueError as exc:
             raise ModelError('重试配置无效，请检查本机参数。', 'invalid_retry_config', 0) from exc
+        self.before_request = before_request or (lambda: None)
 
     def extra_payload(self):
         return {}
@@ -83,6 +84,7 @@ class CompatibleModelClient:
         for attempt in range(1, self.policy.max_attempts + 1):
             started = time.monotonic()
             try:
+                self.before_request()
                 response = self.post(self.config.endpoint, headers={"Authorization": "Bearer " + self.config.api_key},
                                      json=payload, timeout=(10, 45))
             except (requests.Timeout, requests.ConnectionError) as exc:
@@ -129,8 +131,8 @@ class DeepSeekClient(CompatibleModelClient):
     provider = "DeepSeek"
     allowed_endpoint = "https://api.deepseek.com/chat/completions"
 
-    def __init__(self, config: ModelConfig, post=None, sleep=None, policy=None):
-        super().__init__(config, post, sleep, policy)
+    def __init__(self, config: ModelConfig, post=None, sleep=None, policy=None, before_request=None):
+        super().__init__(config, post, sleep, policy, before_request)
 
     def extra_payload(self):
         return {"thinking": {"type": "disabled"}}
@@ -140,8 +142,8 @@ class QwenClient(CompatibleModelClient):
     provider = "通义千问"
     allowed_endpoint = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
 
-    def __init__(self, config: QwenConfig, post=None, sleep=None, policy=None):
-        super().__init__(config, post, sleep, policy)
+    def __init__(self, config: QwenConfig, post=None, sleep=None, policy=None, before_request=None):
+        super().__init__(config, post, sleep, policy, before_request)
 
     def extra_payload(self):
         return {"enable_thinking": False}
