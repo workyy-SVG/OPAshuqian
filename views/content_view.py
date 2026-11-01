@@ -8,13 +8,14 @@ from services.content_service import (generate_content, edit_content, submit_for
 from services.llm_client import DeepSeekClient, QwenClient
 from views.common import STATES, action, display_value, model_configs, display_context, available_channels
 from views.guidance import next_button
-from services.text_check_service import text_findings
+from services.text_check_service import text_findings, expression_findings
 from services import query_service as queries
-from services.quota_service import quota_status
+from services.quota_service import quota_status, session_quota_status
+from services.demo_service import live_models_enabled
 from views.components import content_card, empty_state, state_table
 
 
-def render(repo, product_id, operator):
+def render(repo, product_id, operator, quota_repo=None, session_id=None):
     st.write("只使用已确认资料组织内容。每份内容保留输入快照，逐句审核后才能导出。")
     if not product_id:
         empty_state('准备好资料，就能生成第一份内容', '先导入来源，再确认名称与净含量。', '去准备产品资料', '产品资料', 'content:import')
@@ -36,13 +37,19 @@ def render(repo, product_id, operator):
             mode = st.radio("生成方式", list(labels), format_func=labels.get, horizontal=True)
             configs = model_configs()
             cfg = configs.get(mode)
-            quotas = quota_status(repo)
+            quota_repo = quota_repo if quota_repo is not None else repo
+            quotas = quota_status(quota_repo)
+            session_quota = session_quota_status(quota_repo, session_id) if session_id else None
+            if session_quota:
+                st.caption(f'本会话今日真实模型请求 {session_quota["used"]}/3 · 两家合计，重试也计数；模板不限。')
             with st.expander('今日模型调用额度 · 每天北京时间00:00重置'):
                 for provider,label in (('deepseek','DeepSeek'),('qwen','通义千问')):
                     used = quotas[provider]['used']
                     st.progress(min(used/100,1.0), text=f'{label} · 已用 {used}/100，剩余 {quotas[provider]["remaining"]}')
             if mode == "template":
                 st.caption("模板按确认资料直接填充，用于验证流程；不计为真实模型调用。")
+            elif not live_models_enabled():
+                st.info('管理员已关闭真实模型调用，请使用模板模式。')
             elif not cfg.api_key:
                 st.info(f"尚未配置{labels[mode].replace('实时生成', '')}密钥。按 README 在本机填写 .streamlit/secrets.toml 后即可使用。")
             else:
@@ -65,11 +72,11 @@ def render(repo, product_id, operator):
                     st.warning("请先补齐或处理冲突：" + "、".join(FIELDS[f] for f in basis["missing"]))
                 if basis["conflicts"]:
                     st.warning("所选字段存在未解决冲突，请到数据核对页处理。")
-        quota_exhausted = mode in quotas and quotas[mode]["remaining"] <= 0
+        quota_exhausted = mode in quotas and (quotas[mode]["remaining"] <= 0 or bool(session_quota and session_quota['remaining'] <= 0))
         if quota_exhausted:
-            st.warning("所选模型今天的 100 次 API 调用额度已用完，请明天再试。")
+            st.warning("本会话或所选模型今日额度已用完，请使用模板模式。")
         disabled = (not basis or bool(basis["missing"]) or
-                    (mode != "template" and (not cfg.api_key or quota_exhausted)))
+                    (mode != "template" and (not live_models_enabled() or not cfg.api_key or quota_exhausted)))
         if basis and basis['missing']:
             next_button('去补齐或核对资料', '数据核对', 'content:quality')
         if st.button("生成一份草稿", type="primary", disabled=disabled, key="generate_draft"):
@@ -80,7 +87,7 @@ def render(repo, product_id, operator):
                 bar = st.progress(.2, text='2/3 正在生成；模型通常需要数十秒，网络重试可能更久。')
                 ok, result = action(lambda: generate_content(repo, product_id, request_key, context, content_type, include_price,
                     mode, DeepSeekClient(cfg) if mode == "deepseek" else QwenClient(cfg) if mode == "qwen" else None,
-                    ["product_name", "net_weight_g"] + selected), "草稿已保存，请在“审核与导出”中逐句核对。")
+                    ["product_name", "net_weight_g"] + selected, quota_repo=quota_repo, session_id=session_id), "草稿已保存，请在“审核与导出”中逐句核对。")
                 if ok:
                     bar.progress(1.0, text='3/3 已完成输出校验并保存草稿。')
                     task.update(label='草稿已保存，等待人工审核', state='complete', expanded=False)
@@ -118,6 +125,12 @@ def render_content(repo, row, operator):
     modes = {'template': '模板模式', 'deepseek': 'DeepSeek', 'qwen': '通义千问', 'manual': '人工编辑'}
     st.caption(f"内容 #{content_id} · 修订 R{row['revision']} · {STATES[row['state']]} · {modes.get(row['mode'],row['mode'])} · {display_context(row['context'])}")
     content_card(row['title'], row['body'], row['state'])
+    if row['state'] in ('draft', 'review'):
+        st.warning('待人工审核草稿 · 请核对全部陈述，通过审核前不可对外使用。')
+    for issue in expression_findings(row['title'], row['body'], json.loads(row['snapshot_json'])):
+        from html import escape
+        st.warning(issue['message'])
+        st.markdown(f"**待核对表达：** <mark>{escape(issue['sentence'])}</mark>", unsafe_allow_html=True)
     basis = queries.content_basis(repo, row)
     valid = not basis["missing"] and basis["snapshot_hash"] == row["snapshot_hash"]
     body_issues = text_findings(row['title'], row['body'], basis['snapshot']) if not basis['missing'] else []

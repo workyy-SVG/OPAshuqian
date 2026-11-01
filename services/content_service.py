@@ -82,7 +82,12 @@ def save_draft(repo, job_id, result, mode, attempts=0, usage=None, logical_id=No
 
 @audited('content.generate')
 def generate_content(repo, product_id, request_key, context="retail", content_type="product_intro", include_price=True,
-                     mode="template", client=None, selected_fields=None, logical_id=None):
+                     mode="template", client=None, selected_fields=None, logical_id=None, quota_repo=None, session_id=None):
+    from services.demo_service import live_models_enabled, public_demo
+    if mode != 'template' and not live_models_enabled():
+        raise BusinessError('管理员已关闭真实模型调用，请使用模板模式。', 'live_models_disabled')
+    if mode != 'template' and public_demo() and (not session_id or quota_repo is None):
+        raise BusinessError('公开演示缺少会话额度配置。', 'missing_session_quota')
     created = create_generation(repo, product_id, request_key, context, content_type, include_price, mode,
                                 client.config.name if client else "template", selected_fields)
     job = created["job"]
@@ -95,7 +100,7 @@ def generate_content(repo, product_id, request_key, context="retail", content_ty
             output = {"result": template_result(snapshot), "attempts": 0, "usage": {}}
         elif client:
             # Count every real outbound request, including transient retries.
-            client.before_request = lambda: reserve_request(repo, mode)
+            client.before_request = lambda: reserve_request(quota_repo if quota_repo is not None else repo, mode, session_id=session_id)
             with model_audit_scope(repo.settings.runtime_dir, job['id']):
                 output = client.generate_json(snapshot, PROMPT_VERSION)
         else:

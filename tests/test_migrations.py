@@ -2,13 +2,13 @@ import sqlite3
 import pytest
 from config import ROOT
 from repository import Repository, BusinessError
-from services.migration_service import migrate
+from services.migration_service import migrate, LATEST_SCHEMA_VERSION
 
 
 def test_fresh_and_repeated_initialization(repo):
     with repo.connect() as db:
-        assert db.execute('PRAGMA user_version').fetchone()[0] == 3
-        assert db.execute('SELECT COUNT(*) FROM schema_migrations').fetchone()[0] == 3
+        assert db.execute('PRAGMA user_version').fetchone()[0] == LATEST_SCHEMA_VERSION
+        assert db.execute('SELECT COUNT(*) FROM schema_migrations').fetchone()[0] == LATEST_SCHEMA_VERSION
     repo.add_product('old', 'V1')
     repo.initialize()
     assert len(repo.products()) == 1
@@ -48,6 +48,7 @@ def test_failed_increment_rolls_back_entire_upgrade(repo, tmp_path):
         migrations.mkdir()
         (migrations / '002_broken.sql').write_text('CREATE TABLE must_rollback(id INTEGER);\nINSERT INTO no_such_table VALUES(1);\n', encoding='utf-8')
         (migrations / '003_unused.sql').write_text('SELECT 1;\n', encoding='utf-8')
+        (migrations / '004_unused.sql').write_text('SELECT 1;\n', encoding='utf-8')
         with pytest.raises(sqlite3.OperationalError):
             migrate(db, repo.settings.db_path, repo.settings.runtime_dir, migrations)
         assert db.execute('PRAGMA user_version').fetchone()[0] == 1

@@ -2,6 +2,7 @@ import os
 import streamlit as st
 from repository import BusinessError
 from services.access_service import AccessConfig, AccessRegistry
+from services.demo_service import public_demo
 
 
 @st.cache_resource
@@ -16,7 +17,7 @@ def access_config() -> AccessConfig:
     except (FileNotFoundError, st.errors.StreamlitSecretNotFoundError):
         pass
     address = st.get_option('server.address')
-    required = address not in ('127.0.0.1', 'localhost', '::1') or str(os.environ.get('QIANPIN_AUTH_REQUIRED', values.get('required', False))).lower() == 'true'
+    required = (not public_demo() and address not in ('127.0.0.1', 'localhost', '::1')) or str(os.environ.get('QIANPIN_AUTH_REQUIRED', values.get('required', False))).lower() == 'true'
     return AccessConfig(required, os.environ.get('QIANPIN_AUTH_USER', values.get('username', '')),
                         os.environ.get('QIANPIN_AUTH_PASSWORD_HASH', values.get('password_hash', '')),
                         int(values.get('session_seconds', 1800)))

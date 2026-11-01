@@ -1,4 +1,5 @@
 import streamlit as st
+import uuid
 from config import BRAND_NAME
 from repository import Repository, BusinessError
 from config import Settings
@@ -9,16 +10,41 @@ from views.guidance import apply_theme, workspace_header, product_overview
 from services.experience_service import overview
 from views.components import notifications
 from views.themes import THEMES, apply_background
+from services.demo_service import public_demo, demo_settings, quota_settings, seed_demo
 
 st.set_page_config(page_title="黔品智营 · 产品与内容协同", page_icon="🌿", layout="wide")
 authenticated_user = authorize()
 settings = Settings.from_env()
+quota_repo = None
+session_id = st.session_state.setdefault('model_session_id', uuid.uuid4().hex)
+if public_demo():
+    quota_base = quota_settings(settings)
+    quota_repo = get_repository(str(quota_base.runtime_dir), str(quota_base.db_path))
+    workspace_id = st.session_state.setdefault('demo_workspace_id', uuid.uuid4().hex)
+    settings = demo_settings(settings, session_id, workspace_id)
 try:
-    repo = get_repository(str(settings.runtime_dir), str(settings.db_path))
+    with st.spinner('正在准备工作区与产品资料…'):
+        repo = get_repository(str(settings.runtime_dir), str(settings.db_path))
+        if public_demo() and not st.session_state.get('demo_seeded'):
+            seed_demo(repo)
+            st.session_state['demo_seeded'] = True
 except BusinessError as error:
     st.error(str(error))
     st.stop()
 apply_theme()
+if public_demo():
+    st.info('公开拟制演示 · 本会话资料独立，请勿存放真实客户资料。')
+    with st.sidebar.expander('重置本次演示'):
+        st.caption('重连可能创建新工作区；演示资料不作持久保存承诺。')
+        confirmed_reset = st.checkbox('确认放弃本工作区，恢复统一拟制样例', key='confirm_demo_reset')
+        if st.button('恢复演示样例', disabled=not confirmed_reset, key='reset_demo'):
+            # Rotate the sandbox, preserving both the session quota and old files.
+            token = st.session_state.get('access_token')
+            st.session_state.clear()
+            st.session_state['model_session_id'] = session_id
+            if token:
+                st.session_state['access_token'] = token
+            st.rerun()
 if 'pending_navigation' in st.session_state:
     st.session_state['navigation'] = st.session_state.pop('pending_navigation')
 
@@ -74,6 +100,6 @@ from views import tutorial_view
     "使用教程": tutorial_view.render,
     "产品资料": product_view.render,
     "数据核对": quality_view.render,
-    "内容工作台": content_view.render,
+    "内容工作台": lambda r, p, o: content_view.render(r, p, o, quota_repo, session_id),
     "变更追踪": impact_view.render,
 }[page](repo, product_id, operator)

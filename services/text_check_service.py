@@ -5,6 +5,28 @@ from repository import BusinessError
 from services.unit_service import QUANTITY_PATTERN, grams
 
 
+def expression_findings(title: str, body: str, snapshot: dict) -> list[dict]:
+    """Review hints, separate from hard factual gates; a lexicon is not a legal review."""
+    source = '\n'.join(str(f['value']) for f in snapshot['facts'])
+    categories = {
+        '主观描述': ('精选', '醇厚', '香辣', '鲜美', '顶级', '优质', '天然', '健康', '纯正'),
+        '功效表达': ('降血糖', '降血压', '增强免疫力', '治疗', '治愈', '减肥', '养胃'),
+        '绝对化表达': ('最好', '最佳', '第一', '百分百', '100%', '零风险', '绝对'),
+    }
+    findings = []
+    for section, text in (('title', title), ('body', body)):
+        for category, words in categories.items():
+            for word in words:
+                if category == '主观描述' and word in source:
+                    continue
+                for match in re.finditer(re.escape(word), text):
+                    findings.append({'section': section, 'start': match.start(), 'end': match.end(),
+                                     'sentence': _sentence(text, match.start(), match.end()),
+                                     'message': f'请人工核对{category}“{word}”：' +
+                                     ('当前确认快照未提供该表述。' if word not in source else '来源包含该词，仍需审核表达是否适用。')})
+    return findings
+
+
 def _sentence(text: str, start: int, end: int) -> str:
     left = max((m.end() for m in re.finditer(r'[。！？\n]', text[:start])), default=0)
     right_match = re.search(r'[。！？\n]', text[end:])

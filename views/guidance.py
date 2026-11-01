@@ -63,6 +63,10 @@ def apply_theme():
     .qp-timeline p {margin:6px 0;overflow-wrap:anywhere;}.qp-timeline small {color:var(--qp-muted);}
     .qp-step-current {padding:7px 10px;border-radius:10px;background:#dcfce7;color:#14532d;font-weight:700;}
     .qp-step-idle {padding:7px 10px;color:#334155;}
+    .qp-progress-nav {display:flex;gap:12px;overflow-x:auto;white-space:nowrap;padding:6px 0;}
+    .qp-progress-nav span {flex:0 0 auto;font-size:14px;}
+    .qp-progress-nav [aria-current="step"] {font-weight:700;color:#14532d;}
+    @media(max-width:700px){.qp-hero{margin:4px 0 10px!important;padding:14px 18px!important}.qp-hero h1{font-size:24px!important;padding:0!important;margin:0!important}.qp-hero p,.qp-hero .qp-context{display:none}.qp-progress-nav span{font-size:12px}}
     @media(max-width:700px){.qp-content-card{padding:16px}.qp-prose{font-size:15px}[data-testid="stHorizontalBlock"]{flex-wrap:wrap}[data-testid="stColumn"]{min-width:min(100%,240px);flex:1 1 240px}.qp-hero p{max-width:100%}}
     @media(max-width:700px){.block-container{padding-top:1.4rem}.qp-hero{padding:22px}.qp-hero h1{font-size:28px}.qp-hero p{max-width:100%}}
     </style>''', unsafe_allow_html=True)
@@ -79,7 +83,8 @@ def workspace_header(page, product=None, progress=None):
              '变更追踪':('检查变化影响，更新关联文案并重新审核','内容工作台')}
     goal, following = goals[page]
     st.caption(f'本页目标：{goal}。'+('下载后完成本轮工作；后续调价或纠错再进入变更追踪。' if page=='内容工作台' else f'完成后进入：{following}。'))
-    st.markdown(' → '.join(f"**{m['number']} {name}（当前）**" if name==page else f"{m['number']} {name}" for name,m in MODULES.items()))
+    steps = ''.join(f'<span aria-current="{"step" if name == page else "false"}">{m["number"]} {name}</span>' for name, m in MODULES.items())
+    st.markdown(f'<nav class="qp-progress-nav" aria-label="业务流程">{steps}</nav>', unsafe_allow_html=True)
     with st.expander('查看流程进度与跨模块跳转',expanded=False):
         for col, name in zip(st.columns(4), MODULES):
             with col:

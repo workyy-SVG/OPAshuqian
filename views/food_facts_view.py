@@ -121,6 +121,10 @@ def render(repo):
                 st.dataframe([{'字段': FIELDS[row['field_key']], '来源原文': row['raw_value'],
                                '格式问题': row['error']} for row in preview['rows']], hide_index=True, width='stretch')
                 invalid = any(row['error'] for row in preview['rows'])
+                provided = {row['field_key'] for row in preview['rows'] if row['raw_value'] and not row['error']}
+                missing = [FIELDS[key] for key in ('product_name', 'net_weight_g', 'ingredients_text') if key not in provided]
+                if missing:
+                    st.warning('来源缺失或无法解析：' + '、'.join(missing) + '。请通过CSV或手工补录，核对后再确认。')
             except BusinessError as exc:
                 st.warning(str(exc))
                 invalid = True

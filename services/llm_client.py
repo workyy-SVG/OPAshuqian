@@ -85,6 +85,10 @@ class CompatibleModelClient:
             started = time.monotonic()
             try:
                 self.before_request()
+            except BusinessError as exc:
+                # A denied reservation did not send this attempt to the provider.
+                raise ModelError(str(exc), exc.code, attempt - 1) from exc
+            try:
                 response = self.post(self.config.endpoint, headers={"Authorization": "Bearer " + self.config.api_key},
                                      json=payload, timeout=(10, 45))
             except (requests.Timeout, requests.ConnectionError) as exc:
