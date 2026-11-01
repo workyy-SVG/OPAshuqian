@@ -113,6 +113,7 @@ def render(topic):
     st.caption('教学示意界面 · 数据均为拟制 · 练习不修改你的产品、资料或内容')
     st.progress(step/(len(SCENES[topic])-1), text=f'第{step+1}/{len(SCENES[topic])}幕 · {title}')
     st.image(screen_svg(topic,step), width='stretch')
+    st.caption('图片右上角可放大查看；下方同名按钮可以推进演示，图中的状态会随之变化。')
     st.info(explanation)
     st.markdown('**动手区：点击下方与图中流程对应的按钮**')
     reason = ''
