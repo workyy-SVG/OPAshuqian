@@ -57,10 +57,11 @@ class CompatibleModelClient:
     provider = "模型"
     allowed_endpoint = ""
 
-    def __init__(self, config, post=None, sleep=None):
+    def __init__(self, config, post=None, sleep=None, before_request=None):
         self.config = config
         self.post = post or requests.post
         self.sleep = sleep or time.sleep
+        self.before_request = before_request or (lambda: None)
 
     def extra_payload(self):
         return {}
@@ -84,6 +85,7 @@ class CompatibleModelClient:
         payload.update(self.extra_payload())
         for attempt in (1, 2):
             try:
+                self.before_request()
                 response = self.post(self.config.endpoint, headers={"Authorization": "Bearer " + self.config.api_key},
                                      json=payload, timeout=(10, 45))
             except (requests.Timeout, requests.ConnectionError) as exc:
@@ -125,8 +127,8 @@ class DeepSeekClient(CompatibleModelClient):
     provider = "DeepSeek"
     allowed_endpoint = "https://api.deepseek.com/chat/completions"
 
-    def __init__(self, config: ModelConfig, post=None, sleep=None):
-        super().__init__(config, post, sleep)
+    def __init__(self, config: ModelConfig, post=None, sleep=None, before_request=None):
+        super().__init__(config, post, sleep, before_request)
 
     def extra_payload(self):
         return {"thinking": {"type": "disabled"}}
@@ -136,8 +138,8 @@ class QwenClient(CompatibleModelClient):
     provider = "通义千问"
     allowed_endpoint = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
 
-    def __init__(self, config: QwenConfig, post=None, sleep=None):
-        super().__init__(config, post, sleep)
+    def __init__(self, config: QwenConfig, post=None, sleep=None, before_request=None):
+        super().__init__(config, post, sleep, before_request)
 
     def extra_payload(self):
         return {"enable_thinking": False}

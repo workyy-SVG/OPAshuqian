@@ -36,6 +36,13 @@ CREATE TABLE IF NOT EXISTS generation_jobs (
  attempts INTEGER NOT NULL DEFAULT 0, model TEXT NOT NULL, prompt_version TEXT NOT NULL,
  error_code TEXT, usage_json TEXT, created_at TEXT NOT NULL, finished_at TEXT
 );
+CREATE TABLE IF NOT EXISTS model_daily_usage (
+ provider TEXT NOT NULL CHECK(provider IN ('deepseek','qwen')),
+ usage_date TEXT NOT NULL,
+ request_count INTEGER NOT NULL DEFAULT 0 CHECK(request_count >= 0),
+ updated_at TEXT NOT NULL,
+ PRIMARY KEY(provider,usage_date)
+);
 CREATE TABLE IF NOT EXISTS content_revisions (
  id INTEGER PRIMARY KEY, logical_id TEXT NOT NULL, revision INTEGER NOT NULL,
  product_id INTEGER NOT NULL REFERENCES product_versions(id), content_type TEXT NOT NULL,

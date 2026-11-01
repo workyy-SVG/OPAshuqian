@@ -5,6 +5,7 @@ from decimal import Decimal
 from repository import BusinessError, now
 from services.fact_service import _snapshot, canonical, current_basis, snapshot_hash
 from services.llm_client import PROMPT_VERSION, ModelError, validate_result
+from services.quota_service import reserve_request
 
 
 def template_result(snapshot):
@@ -89,6 +90,8 @@ def generate_content(repo, product_id, request_key, context="retail", content_ty
         if mode == "template":
             output = {"result": template_result(snapshot), "attempts": 0, "usage": {}}
         elif client:
+            # Count every actual outbound request, including a transient retry.
+            client.before_request = lambda: reserve_request(repo, mode)
             output = client.generate_json(snapshot, PROMPT_VERSION)
         else:
             raise ModelError("请先配置模型。", "missing_api_key", 0)
