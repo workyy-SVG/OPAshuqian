@@ -8,6 +8,7 @@ from views import product_view, quality_view, content_view, impact_view
 from views.guidance import apply_theme, workspace_header, product_overview
 from services.experience_service import overview
 from views.components import notifications
+from views.themes import THEMES, apply_background
 
 st.set_page_config(page_title="黔品智营 · 产品与内容协同", page_icon="🌿", layout="wide")
 authenticated_user = authorize()
@@ -25,7 +26,7 @@ with st.sidebar:
     st.title("🌿 黔品智营")
     st.caption("产品资料有据 · 内容更新可追溯")
     st.divider()
-    page = st.radio("工作空间", ["产品资料", "数据核对", "内容工作台", "变更追踪"], key="navigation")
+    page = st.radio("工作空间", ["使用教程", "产品资料", "数据核对", "内容工作台", "变更追踪"], index=1, key="navigation")
     st.divider()
     st.caption(BRAND_NAME)
     st.subheader('当前产品')
@@ -54,19 +55,26 @@ with st.sidebar:
         st.caption('开始确认或审核前，记得填写操作人。')
     if st.button('打开体验向导', key='open_guide'):
         st.session_state['open_welcome'] = True
+    with st.expander('背景风格', expanded=False):
+        st.selectbox('选择界面风格', list(THEMES), key='background_style')
+        st.caption('五种风格可随时切换，本次会话内保留；不影响产品资料。')
     st.caption("教学演示 · 公开资料需核对，样例为拟制")
 
 notifications()
+apply_background()
 
 progress = overview(repo, product_id)
-workspace_header(page, product_map.get(product_id), progress)
-if product_id:
+if page != '使用教程':
+    workspace_header(page, product_map.get(product_id), progress)
+if product_id and page == '产品资料':
     product_overview(progress)
+from views import tutorial_view
 {
+    "使用教程": tutorial_view.render,
     "产品资料": product_view.render,
     "数据核对": quality_view.render,
     "内容工作台": content_view.render,
     "变更追踪": impact_view.render,
 }[page](repo, product_id, operator)
 from views.onboarding import show
-show(repo, progress, not products)
+show(repo, progress, not products and page != '使用教程')
