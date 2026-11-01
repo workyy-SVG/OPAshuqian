@@ -138,9 +138,11 @@ def test_ui_search_to_candidate_import(tmp_path, monkeypatch):
     cached_lookup.clear()
     app = AppTest.from_file(str(ROOT/'app.py'), default_timeout=20).run()
     assert not app.exception
+    app.radio(key='food_search_kind').set_value('barcode').run()
     next(x for x in app.text_input if x.label == '条码或名称').set_value('3017620422003')
     next(b for b in app.button if b.label == '查询公开商品资料').click().run()
     assert not app.exception
+    app.button(key='search_preview').click().run()
     next(b for b in app.button if b.label == '导入为待确认候选').click().run()
     assert any('先核对商品' in w.value for w in app.warning)
     next(c for c in app.checkbox if c.label.startswith('已核对商品')).check()

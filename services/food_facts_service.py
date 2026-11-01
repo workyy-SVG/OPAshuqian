@@ -88,7 +88,7 @@ CATEGORIES = {
     '水饮': {'饮料与饮用水':'en:beverages'},
     '生鲜': {'果蔬':'en:fruits-and-vegetables','肉类':'en:meats','蛋类':'en:eggs','水产':'en:seafood'},
     '零食': {'休闲零食':'en:snacks'},
-    '乳品': {'乳制品':'en:dairies'},
+    '乳品': {'乳制品':'en:dairies', '牛奶':'en:milks', '酸奶':'en:yogurts', '奶酪':'en:cheeses'},
     '调味品': {'酱料与调味':'en:condiments'},
 }
 PAGE_SIZE = 12
