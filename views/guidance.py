@@ -66,6 +66,9 @@ def apply_theme():
     .qp-progress-nav {display:flex;gap:12px;overflow-x:auto;white-space:nowrap;padding:6px 0;}
     .qp-progress-nav span {flex:0 0 auto;font-size:14px;}
     .qp-progress-nav [aria-current="step"] {font-weight:700;color:#14532d;}
+    .st-key-workspace-nav [data-testid="stHorizontalBlock"] {flex-wrap:wrap;}
+    .st-key-workspace-nav [data-testid="stColumn"] {min-width:140px!important;flex:1 1 140px!important;}
+    @media(max-width:1100px){[data-testid="stHorizontalBlock"]{flex-wrap:wrap}[data-testid="stColumn"]{min-width:min(100%,240px);flex:1 1 240px}.st-key-workspace-metrics [data-testid="stColumn"]{min-width:90px!important;flex:1 1 90px!important}.st-key-workspace-metrics [data-testid="stMetric"]{padding:8px}.st-key-workspace-metrics [data-testid="stMetricValue"]{font-size:24px}.st-key-workspace-metrics [data-testid="stMetricLabel"] p{font-size:12px;white-space:normal}}
     @media(max-width:700px){.qp-hero{margin:4px 0 10px!important;padding:14px 18px!important}.qp-hero h1{font-size:24px!important;padding:0!important;margin:0!important}.qp-hero p,.qp-hero .qp-context{display:none}.qp-progress-nav span{font-size:12px}}
     @media(max-width:700px){.qp-content-card{padding:16px}.qp-prose{font-size:15px}[data-testid="stHorizontalBlock"]{flex-wrap:wrap}[data-testid="stColumn"]{min-width:min(100%,240px);flex:1 1 240px}.qp-hero p{max-width:100%}}
     @media(max-width:700px){.block-container{padding-top:1.4rem}.qp-hero{padding:22px}.qp-hero h1{font-size:28px}.qp-hero p{max-width:100%}}
