@@ -12,6 +12,7 @@ from services.food_facts_service import lookup, browse, CATEGORIES, candidate_pr
 from services.food_facts_service import product_image_urls, USER_AGENT
 from services.product_illustration_service import illustration_kind, ILLUSTRATIONS
 from services.food_display_service import name_display, quantity_display, source_quantity
+from services.local_food_catalog import categories as local_categories, search_foods
 from html import escape
 from views.common import action
 
@@ -290,9 +291,11 @@ def preview_dialog(repo, product):
 
 def render(repo):
     st.subheader('选商品 → 看资料 → 导入候选')
-    st.write('不知道条码或完整名称也能选：选择分类，加载商品列表，直接挑选并预览。')
+    st.write('优先浏览贵州及中文食品；需要核对国际商品条码时，再使用 Open Food Facts。')
     st.info('只补充来源实际提供的名称、明确重量和配料。价格请自行补录；公开资料仍需人工核对。')
-    catalog_tab, search_tab = st.tabs(['按分类挑选商品', '条码 / 名称查询'])
+    local_tab, catalog_tab, search_tab = st.tabs(['贵州及中文食品', '国际食品分类', '国际条码 / 名称查询'])
+    with local_tab:
+        local_catalog()
     with catalog_tab:
         catalog()
     with search_tab:
@@ -305,3 +308,23 @@ def render(repo):
             preview_dialog(repo, product)
     st.caption(f'数据来源：{ATTRIBUTION}。成功结果缓存1小时；名称查询最多5项，分类每页最多12项。')
     st.markdown('[数据许可与使用条款](https://world.openfoodfacts.org/terms-of-use)')
+
+
+def local_catalog():
+    st.markdown('**中文选品参考 · 优先收录贵州特色食品**')
+    st.caption('这里不依赖国外食品接口，也不伪造条码、品牌、净含量或配料。选中方向后，请按真实包装手工补录。')
+    left, right = st.columns([1, 2])
+    category = left.selectbox('中文食品分类', local_categories(), key='local_food_category')
+    keyword = right.text_input('搜索中文食品', placeholder='例如：刺梨、酸汤、羊肉粉、辣椒', key='local_food_keyword')
+    foods = search_foods(category, keyword)
+    st.caption(f'当前显示 {len(foods)} 项；均为选品方向，不代表具体在售商品。')
+    if not foods:
+        st.info('没有匹配项。可清空关键词或切换分类。')
+        return
+    columns = st.columns(2)
+    for index, food in enumerate(foods):
+        with columns[index % 2], st.container(border=True):
+            st.write('**' + food['name'] + '**')
+            st.caption(food['region'] + ' · ' + food['kind'])
+            st.write(food['note'])
+            st.caption('下一步：取得真实包装后，通过“手动补录”或CSV录入名称、规格、配料和价格。')
