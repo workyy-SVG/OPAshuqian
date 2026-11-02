@@ -20,6 +20,7 @@ def package_release(output_dir=None):
         paths.extend(p for p in (ROOT / directory).rglob("*") if p.is_file()
                      and p.suffix in (".py", ".md", ".csv", ".yml", ".yaml", ".sql", ".txt", ".json") and "__pycache__" not in p.parts)
     paths.extend(ROOT / ".streamlit" / name for name in ("config.toml", "secrets.example.toml"))
+    paths.append(ROOT / 'static' / 'product-illustrations.png')
     with zipfile.ZipFile(output, "x", zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(set(paths)):
             archive.write(path, "qianpin/" + path.relative_to(ROOT).as_posix())

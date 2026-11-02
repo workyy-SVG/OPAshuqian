@@ -1,9 +1,76 @@
 """Explicit remote discovery and immediate, isolated candidate previews."""
 import streamlit as st
-from config import FIELDS
+import requests
+import re
+from io import BytesIO
+from PIL import Image, ImageOps, UnidentifiedImageError
+from datetime import datetime
+from zoneinfo import ZoneInfo
+from config import FIELDS, Settings
 from repository import BusinessError
-from services.food_facts_service import lookup, browse, CATEGORIES, candidate_preview, import_product, ATTRIBUTION
+from services.food_facts_service import lookup, browse, CATEGORIES, candidate_preview, import_product, ATTRIBUTION, snapshot_id
+from services.food_facts_service import product_image_urls, USER_AGENT
+from services.product_illustration_service import illustration_kind, ILLUSTRATIONS
+from services.food_display_service import name_display, quantity_display, source_quantity
+from html import escape
 from views.common import action
+
+
+@st.cache_data(ttl=900, max_entries=128, show_spinner=False)
+def cached_product_photo(url):
+    """Bound downloads and normalize packaging to an uncropped white display area."""
+    try:
+        with requests.get(url, headers={'User-Agent': USER_AGENT}, timeout=(3, 5),
+                          stream=True, allow_redirects=False) as response:
+            if response.status_code != 200:
+                return None
+            content = bytearray()
+            for chunk in response.iter_content(65536):
+                content.extend(chunk)
+                if len(content) > 4 * 1024 * 1024:
+                    return None
+        with Image.open(BytesIO(content)) as original:
+            if original.width * original.height > 12_000_000:
+                return None
+            photo = ImageOps.exif_transpose(original).convert('RGBA')
+            photo.thumbnail((340, 400))
+            canvas = Image.new('RGB', (380, 440), 'white')
+            canvas.paste(photo, ((380-photo.width)//2, (440-photo.height)//2), photo)
+            output = BytesIO()
+            canvas.save(output, format='PNG')
+            return output.getvalue()
+    except (requests.RequestException, OSError, ValueError, UnidentifiedImageError, Image.DecompressionBombError):
+        return None
+
+
+def product_photo(product):
+    for url in product_image_urls(product):
+        photo = cached_product_photo(url)
+        if photo:
+            st.image(photo, width='stretch')
+            st.caption('商品包装图 · Open Food Facts')
+            st.link_button('查看原图 ↗', url)
+            return
+    render_product_illustration(product)
+
+
+def render_product_illustration(product):
+    kind = illustration_kind(product)
+    if kind:
+        label, column, row = ILLUSTRATIONS[kind]
+        x, y = column * 100 / 3, row * 100 / 3
+        st.markdown(f'''<div role="img" aria-label="{label}类别示意图，非实物包装"
+            style="width:100%;aspect-ratio:1;background-color:white;border-radius:12px;
+            background-image:url('app/static/product-illustrations.png');background-size:400% 400%;
+            background-position:{x}% {y}%;background-repeat:no-repeat"></div>''', unsafe_allow_html=True)
+        st.caption(f'{label}示意图 · 非实物包装，仅表示类别')
+        return
+    st.markdown('''<div style="min-height:180px;border-radius:16px;background:#f4f7f5;
+        border:1px dashed #a5bdb3;display:flex;flex-direction:column;align-items:center;
+        justify-content:center;color:#496458;padding:16px;text-align:center">
+        <span style="font-size:44px" aria-hidden="true">▧</span>
+        <strong>暂无可用商品图</strong><span style="font-size:13px;margin-top:8px">
+        类型无法可靠判断<br>使用通用占位，避免配错图片</span></div>''', unsafe_allow_html=True)
 
 
 @st.cache_data(ttl=3600, max_entries=256, show_spinner=False)
@@ -11,14 +78,24 @@ def cached_lookup(query, kind):
     return lookup(query, kind)
 
 
-@st.cache_data(ttl=3600, max_entries=128, show_spinner=False)
 def cached_catalog(category, subcategory, page):
-    return browse(category, subcategory, page)
+    return browse(category, subcategory, page, cache_dir=Settings.from_env().runtime_dir / 'food-catalog-cache')
 
 
 def product_label(product):
-    name = product.get('product_name_zh') or product.get('product_name') or '未命名商品'
-    return f"{name} · {product.get('brands') or '品牌未提供'} · {product.get('quantity') or '规格未提供'} · {product['code']}"
+    names = name_display(product)
+    chinese = ('参考中文：' if '非官方译名' in names['label'] else '') + names['chinese']
+    name = chinese + (' / ' + names['original'] if names['original'] != names['chinese'] else '')
+    return f"{name} · {product.get('brands') or '品牌未提供'} · {quantity_display(product)} · {product['code']}"
+
+
+def render_chinese_name(product):
+    names = name_display(product)
+    st.markdown(f'''<div class="qp-chinese-name" style="background:#eaf3ff;color:#123a63;
+        border-left:4px solid #245ca6;border-radius:8px;padding:10px 12px;margin:8px 0;
+        font-size:16px;font-weight:700;line-height:1.65;overflow-wrap:anywhere">
+        <span style="display:block;font-size:12px;font-weight:600;color:#123a63">{escape(names['label'])}</span>
+        <span>{escape(names['chinese'])}</span></div>''', unsafe_allow_html=True)
 
 
 def close_preview():
@@ -53,6 +130,8 @@ def catalog(prefix='catalog', show_cards=True):
     left, right = st.columns(2)
     category = left.selectbox('商品大类', list(CATEGORIES), key=prefix + '_category')
     subcategory = right.selectbox('细分类', list(CATEGORIES[category]), key=prefix + '_subcategory:' + category)
+    if category == '水饮':
+        st.caption('建议先选饮用水、果汁或茶饮料等细分类；“饮料与饮用水”覆盖全库，加载可能较慢。')
     identity = (category, subcategory)
     if st.session_state.get(prefix + '_identity') != identity:
         st.session_state[prefix + '_identity'] = identity
@@ -75,7 +154,12 @@ def catalog(prefix='catalog', show_cards=True):
     page = result['page']
     total = result['total']
     st.caption(f"{category} / {subcategory} · 第{page}页 · " +
-               (f'数据源报告约{total}条' if total is not None else '总数由数据源提供') + '；每页最多12项')
+               (f'数据源报告约{total}条' if total is not None else '为加快加载，不统计全库总数') + '；每页最多12项')
+    if result.get('saved_at'):
+        saved = datetime.fromtimestamp(result['saved_at'], ZoneInfo('Asia/Shanghai')).strftime('%Y-%m-%d %H:%M:%S')
+        if result.get('stale'):
+            st.warning('上游暂时不可用，正在展示同一分类、同一页最近成功获取的真实缓存。')
+        st.caption(f'资料获取时间：{saved}（北京时间）' + (' · 缓存资料，请按实物复核' if result.get('cached') else ' · 本次接口返回'))
     products = result['products']
     if products:
         selected = st.selectbox('从本页商品列表选择', range(len(products)), index=None,
@@ -92,9 +176,14 @@ def catalog(prefix='catalog', show_cards=True):
         columns = st.columns(2)
         for index, product in enumerate(products):
             with columns[index % 2], st.container(border=True):
-                st.write('**' + str(product.get('product_name_zh') or product.get('product_name') or '未命名商品') + '**')
-                st.caption(f"条码 {product['code']} · {product.get('brands') or '品牌未提供'}")
-                st.write('包装：' + str(product.get('quantity') or '未提供'))
+                details, picture = st.columns([3, 2], vertical_alignment='center')
+                with details:
+                    st.write('**' + name_display(product)['original'] + '**')
+                    render_chinese_name(product)
+                    st.caption(f"条码 {product['code']} · {product.get('brands') or '品牌未提供'}")
+                    st.write('规格：' + quantity_display(product))
+                with picture:
+                    product_photo(product)
                 st.button('选择此商品，查看候选预览', key=f"catalog_pick:{index}:{product['code']}",
                           on_click=select_catalog_product, args=(product,))
     prev, next_col = st.columns(2)
@@ -136,21 +225,44 @@ def search():
     if results:
         selected = st.selectbox('选择查询结果', range(len(results)), key='food_selected',
                                 format_func=lambda i: product_label(results[i]))
+        render_chinese_name(results[selected])
+        st.write('规格：' + quantity_display(results[selected]))
+        with st.columns([1, 2])[0]:
+            product_photo(results[selected])
         st.button('查看查询商品的候选预览', key='search_preview', on_click=select_catalog_product,
                   args=(results[selected], '条码 / 名称查询'))
 
 
 @st.dialog('商品候选预览 · 核对后再导入', width='large', on_dismiss=close_preview)
 def preview_dialog(repo, product):
-    st.subheader(str(product.get('product_name_zh') or product.get('product_name') or '未命名商品'))
+    st.subheader(name_display(product)['original'])
+    render_chinese_name(product)
     st.caption('来源：' + st.session_state.get('food_origin', '公开食品资料') + ' · 条码 ' + str(product['code']))
+    st.caption('规格或实物图缺失时，可补查最新资料；若来源仍缺失，需按实物核对并补录。')
+    if st.button('补查此商品的最新图片与规格', key='refresh_food_product'):
+        try:
+            with st.spinner('正在按当前条码补查最新资料…'):
+                latest = lookup(str(product['code']), 'barcode')
+            same_product = next((p for p in latest if str(p['code']).lstrip('0') == str(product['code']).lstrip('0')), None)
+            if same_product:
+                st.session_state['food_preview_product'] = same_product
+                st.session_state['food_preview_refreshed'] = True
+                st.rerun()
+            st.info('未查到对应商品的新资料，保留当前预览。')
+        except BusinessError as exc:
+            st.warning('本次补查未成功，保留当前资料：' + str(exc))
+    if st.session_state.pop('food_preview_refreshed', False):
+        st.success('已按当前条码补查。请重新核对资料；来源仍缺失的字段不会猜填。')
+    with st.columns([1, 2])[0]:
+        product_photo(product)
     st.info('这里只是预览，尚未导入。请核对商品身份，勾选确认后再保存为候选。')
-    st.caption(f"品牌参考：{product.get('brands') or '来源未提供'} · 包装规格：{product.get('quantity') or '来源未提供'}")
+    st.caption(f"品牌参考：{product.get('brands') or '来源未提供'}")
+    st.write('规格：' + quantity_display(product))
     st.link_button('在 Open Food Facts 查看来源', f"https://world.openfoodfacts.org/product/{product['code']}")
     with st.expander('查看本次来源原始字段（含营养信息）'):
         st.json(product)
     code = product['code']
-    with st.form(f'food_candidate:{code}'):
+    with st.form(f'food_candidate:{code}:{snapshot_id(product)}'):
         sku = st.text_input('导入到SKU', value=f'OFF-{code}', max_chars=80,
                             help='默认创建独立演示SKU。只有核实为同一商品后，才填写已有SKU。')
         version = st.text_input('产品版本', value='V1', max_chars=80)
@@ -163,8 +275,8 @@ def preview_dialog(repo, product):
             missing = [FIELDS[key] for key in ('product_name', 'net_weight_g', 'ingredients_text') if key not in provided]
             if missing:
                 st.warning('来源缺失或无法解析：' + '、'.join(missing) + '。请通过CSV或手工补录，核对后再确认。')
-            quantity = str(product.get('quantity') or '')
-            if 'net_weight_g' not in provided and any(unit in quantity.lower() for unit in ('ml', 'cl', '毫升', '升')):
+            quantity = source_quantity(product)
+            if 'net_weight_g' not in provided and re.search(r'\d\s*(?:ml|cl|l)\b|毫升|厘升|升', quantity, re.I):
                 st.info(f'包装“{quantity}”标的是体积，不能直接当作克重。可先导入已有名称和配料，再按实物补充重量资料。')
         except BusinessError as exc:
             st.warning(str(exc))
