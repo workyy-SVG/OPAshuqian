@@ -189,8 +189,13 @@ def candidate_preview(product: dict[str, Any], sku: str, version: str) -> dict[s
     code = str(product.get('code', ''))
     if not re.fullmatch(r'[0-9]{8,14}', code):
         raise BusinessError('数据源条码无效，请重新查询。')
-    values = {'product_name': product.get('product_name_zh') or product.get('product_name'),
-              'ingredients_text': product.get('ingredients_text_zh') or product.get('ingredients_text')}
+    values = {'product_name': product.get('product_name_zh') or product.get('product_name')}
+    ingredients = product.get('ingredients_text_zh')
+    if not isinstance(ingredients, str) or not re.search(r'[\u4e00-\u9fff]', ingredients):
+        raw_ingredients = product.get('ingredients_text')
+        ingredients = raw_ingredients if isinstance(raw_ingredients, str) and re.search(r'[\u4e00-\u9fff]', raw_ingredients) else None
+    if ingredients:
+        values['ingredients_text'] = ingredients
     quantity = source_quantity(product)
     weight = re.fullmatch(r'(\d+(?:\.\d+)?\s*(?:mg|kg|毫克|千克|公斤|g|克|斤|两))\s*[e℮]?', quantity.strip(), re.I) if isinstance(quantity, str) else None
     if weight:

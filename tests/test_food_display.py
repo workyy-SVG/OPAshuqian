@@ -72,6 +72,14 @@ def test_other_language_front_image_and_generic_front_still_bind_barcode():
     assert not product_image_urls({'code': '6111266962187', 'image_url': 'https://[bad'})
 
 
+def test_foreign_ingredients_remain_source_only_until_translated_and_confirmed():
+    record = product()
+    record.update(ingredients_text='eau, sucre', ingredients_text_zh=None)
+    assert 'ingredients_text' not in {r['field_key'] for r in candidate_preview(record, 'OFF-X', 'V1')['rows']}
+    record['ingredients_text_zh'] = '水、糖'
+    assert 'ingredients_text' in {r['field_key'] for r in candidate_preview(record, 'OFF-X', 'V1')['rows']}
+
+
 def test_card_and_dialog_omit_chinese_notes(repo, monkeypatch):
     monkeypatch.setenv('QIANPIN_RUNTIME_DIR', str(repo.settings.runtime_dir))
     monkeypatch.setenv('QIANPIN_DB_PATH', str(repo.settings.db_path))

@@ -128,10 +128,15 @@ def render_work(repo, product_id, operator):
             st.caption('先在卡片选择资料，再填写下方处理依据并保存。候选尚未成为确认资料。')
             st.markdown('**第2步 · 确认处理方式，填写核对依据**')
             decision = st.radio("处理方式", ["确认采用", "排除误录", "重新分配对象"], horizontal=True, key="decision:" + key)
+            evidence = {r['id']: r for r in issue['observations']}
+            chosen = st.session_state.get('choice:'+key)
+            if chosen not in evidence:
+                chosen = None
+            if chosen:
+                st.info(f"当前选择：{evidence[chosen]['raw']} · {evidence[chosen]['source_label']} · 尚未保存")
+            else:
+                st.warning('请先在上方卡片选择一条资料。')
             with st.form("resolve:" + key):
-                evidence = {r['id']: r for r in issue['observations']}
-                chosen = st.selectbox("这次处理哪条资料？", list(evidence), key="choice:" + key,
-                    format_func=lambda i: f"{evidence[i]['raw']} · {evidence[i]['source_label']} · #{i}")
                 target = product_id
                 if decision == '重新分配对象':
                     products = queries.products(repo)
@@ -140,7 +145,7 @@ def render_work(repo, product_id, operator):
                 reason = st.text_input("核对依据 / 处理原因", key="reason:" + key, placeholder="说明查阅了什么依据、为什么采纳或排除")
                 st.caption('依据示例：“已查看包装标签为200g”；“查明此条250g为误录”。请填写本次实际核查结果。')
                 acknowledged = st.checkbox('确认排除此项；来源和处理历史仍保留', key='exclude_ack:'+key) if decision=='排除误录' else True
-                submitted = st.form_submit_button("保存本次处理", type="primary")
+                submitted = st.form_submit_button("保存本次处理", type="primary", disabled=chosen is None)
                 if submitted:
                     if not acknowledged:
                         st.session_state['notice'] = ('warning','请先勾选排除确认；资料尚未修改。')

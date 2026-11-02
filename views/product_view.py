@@ -2,7 +2,7 @@ import csv
 import io
 import streamlit as st
 from config import ROOT, FIELDS
-from services.import_service import preview_import, commit_import, add_manual, create_basic_product
+from services.import_service import preview_import, commit_import, add_manual, create_basic_product, add_manual_batch
 from views.common import action, fact_table, STATES, display_context
 from views.guidance import next_button
 from services import query_service as queries
@@ -29,6 +29,8 @@ def render(repo, product_id, operator):
             encoding = st.selectbox("文件编码", ["utf-8-sig", "gb18030"], format_func=lambda v: "UTF-8（推荐）" if v == "utf-8-sig" else "GB18030（手动选择）")
         with col2:
             st.download_button("下载空白模板", (ROOT / "samples/template.csv").read_bytes(), "黔品智营资料模板.csv", "text/csv")
+            wide = 'SKU,产品版本,商品名称,净含量,零售价格,配料,使用方法,储存说明,来源说明,来源位置,适用日期\n001,V1,示例商品,200g,12.00,,,,包装标签,包装正面,\n'
+            st.download_button('下载中文一行一商品模板', wide.encode('utf-8-sig'), '黔品智营中文模板.csv', 'text/csv')
             st.download_button("下载拟制样例", (ROOT / "samples/products.csv").read_bytes(), "拟制样例.csv", "text/csv")
             import zipfile
             pack = io.BytesIO()
@@ -86,14 +88,29 @@ def render(repo, product_id, operator):
                         st.session_state["next_product"] = new_id
                         st.rerun()
         if product_id:
+            with st.expander('一次填写商品基础资料', expanded=True):
+                with st.form('basic_product_observations'):
+                    name = st.text_input('产品名称')
+                    weight = st.text_input('净含量', placeholder='例如：200g')
+                    ingredients = st.text_area('配料原文（可留空）')
+                    price = st.text_input('零售价格（可留空，按元填写）', placeholder='例如：12.00')
+                    source = st.text_input('共同来源说明', placeholder='例如：产品包装标签')
+                    reason = st.text_input('补录原因', value='首次录入产品基础资料')
+                    if st.form_submit_button('保存以上资料为待确认候选', type='primary'):
+                        ok, _ = action(lambda: add_manual_batch(repo, product_id,
+                            {'product_name':name,'net_weight_g':weight,'ingredients_text':ingredients,'price_cent':price},
+                            source, reason, operator))
+                        if ok: st.rerun()
             with st.form("manual_observation"):
                 st.markdown('**1 · 填写包装或价目表上的信息**')
                 field = st.selectbox("字段", list(FIELDS), format_func=FIELDS.get, help='选择你要补充的一项产品信息，每次保存一项。')
                 raw = st.text_area("来源原文", placeholder='例如：200g、12.00，或包装上的配料说明', help="重量可填200g或0.2kg；金额填写元，例如12.00。")
-                scope = st.selectbox('适用范围', ['general', 'retail', 'wholesale'], format_func=display_context,
-                                     help='名称、净含量和说明选通用资料；价格选零售或批发。')
-                custom_scope = st.text_input('其他价格渠道（可留空）', help='仅当价格属于其他渠道时填写，例如门店A。')
-                context = custom_scope.strip() if field == 'price_cent' and custom_scope.strip() else scope
+                if field == 'price_cent':
+                    scope = st.selectbox('价格渠道', ['retail', 'wholesale'], format_func=display_context)
+                    custom_scope = st.text_input('其他价格渠道（可留空）', help='例如门店A。')
+                    context = custom_scope.strip() or scope
+                else:
+                    context = 'general'
                 st.markdown('**2 · 标明来源与补录原因**')
                 source = st.text_input("来源说明", placeholder="例如包装标签、已核对价目表", help='帮助之后的审核人追溯这项说法从哪里来。')
                 effective = st.text_input("适用日期（可留空）", placeholder="YYYY-MM-DD")

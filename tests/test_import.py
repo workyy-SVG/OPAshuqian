@@ -1,7 +1,7 @@
 import pytest
 from config import ROOT
 from repository import BusinessError
-from services.import_service import normalize_value, preview_import, commit_import
+from services.import_service import normalize_value, preview_import, commit_import, add_manual_batch
 
 
 def test_units_and_decimal():
@@ -49,3 +49,16 @@ def test_streaming_row_limit_is_enforced(monkeypatch):
     with pytest.raises(BusinessError) as error:
         preview_import(data)
     assert error.value.code == 'row_limit'
+
+
+def test_chinese_wide_template_and_manual_batch(repo):
+    data = 'SKU,产品版本,商品名称,净含量,零售价格,来源说明\n001,V1,刺梨汁,200g,12.00,包装标签\n'.encode('utf-8-sig')
+    preview = preview_import(data)
+    assert not preview['errors'] and len(preview['rows']) == 3
+    result = commit_import(repo, preview, '中文模板.csv')
+    product_id = result['product_ids'][0]
+    rows = repo.all('SELECT * FROM observations WHERE product_id=?', (product_id,))
+    assert {r['field'] for r in rows} == {'product_name','net_weight_g','price_cent'}
+    added = add_manual_batch(repo, product_id, {'product_name':'刺梨原浆','net_weight_g':'250g'}, '新包装', '包装更新', '测试员')
+    assert added['candidates'] == 2
+    assert len(repo.all('SELECT * FROM observation_actions')) == 2
