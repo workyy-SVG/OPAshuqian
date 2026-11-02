@@ -34,7 +34,7 @@ def test_503_retries_once_then_returns_real_response(monkeypatch, tmp_path):
 
 def expire(folder, tag, page=1, seconds=7200):
     path = snapshot_path(folder, tag, page)
-    saved = json.loads(path.read_text())
+    saved = json.loads(path.read_text(encoding='utf-8'))
     saved['saved_at'] = time.time() - seconds
     path.write_text(json.dumps(saved))
 
