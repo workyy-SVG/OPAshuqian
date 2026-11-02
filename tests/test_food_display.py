@@ -72,7 +72,7 @@ def test_other_language_front_image_and_generic_front_still_bind_barcode():
     assert not product_image_urls({'code': '6111266962187', 'image_url': 'https://[bad'})
 
 
-def test_card_and_dialog_have_chinese_high_contrast_notes(repo, monkeypatch):
+def test_card_and_dialog_omit_chinese_notes(repo, monkeypatch):
     monkeypatch.setenv('QIANPIN_RUNTIME_DIR', str(repo.settings.runtime_dir))
     monkeypatch.setenv('QIANPIN_DB_PATH', str(repo.settings.db_path))
     sample = product()
@@ -82,11 +82,13 @@ def test_card_and_dialog_have_chinese_high_contrast_notes(repo, monkeypatch):
     app.button(key='catalog_load').click().run()
     assert not app.exception
     notes = [m.value for m in app.markdown if 'qp-chinese-name' in m.value]
-    assert notes and all('#123a63' in n and '矿泉水' in n for n in notes)
+    assert not notes
+    assert any('Naturell Mineralwasser' in m.value for m in app.markdown)
     assert any('规格：500 毫升' in m.value for m in app.markdown)
     app.button(key='catalog_pick:0:3017620422003').click().run()
     assert not app.exception and app.session_state['food_preview_open']
-    assert len([m for m in app.markdown if 'qp-chinese-name' in m.value]) == 2
+    assert not [m for m in app.markdown if 'qp-chinese-name' in m.value]
+    assert app.subheader[-1].value == 'Naturell Mineralwasser'
 
 
 def test_explicit_detail_refresh_keeps_barcode_and_resets_acknowledgment(repo, monkeypatch):

@@ -84,18 +84,8 @@ def cached_catalog(category, subcategory, page):
 
 def product_label(product):
     names = name_display(product)
-    chinese = ('参考中文：' if '非官方译名' in names['label'] else '') + names['chinese']
-    name = chinese + (' / ' + names['original'] if names['original'] != names['chinese'] else '')
+    name = names['original']
     return f"{name} · {product.get('brands') or '品牌未提供'} · {quantity_display(product)} · {product['code']}"
-
-
-def render_chinese_name(product):
-    names = name_display(product)
-    st.markdown(f'''<div class="qp-chinese-name" style="background:#eaf3ff;color:#123a63;
-        border-left:4px solid #245ca6;border-radius:8px;padding:10px 12px;margin:8px 0;
-        font-size:16px;font-weight:700;line-height:1.65;overflow-wrap:anywhere">
-        <span style="display:block;font-size:12px;font-weight:600;color:#123a63">{escape(names['label'])}</span>
-        <span>{escape(names['chinese'])}</span></div>''', unsafe_allow_html=True)
 
 
 def close_preview():
@@ -179,7 +169,6 @@ def catalog(prefix='catalog', show_cards=True):
                 details, picture = st.columns([3, 2], vertical_alignment='center')
                 with details:
                     st.write('**' + name_display(product)['original'] + '**')
-                    render_chinese_name(product)
                     st.caption(f"条码 {product['code']} · {product.get('brands') or '品牌未提供'}")
                     st.write('规格：' + quantity_display(product))
                 with picture:
@@ -225,7 +214,6 @@ def search():
     if results:
         selected = st.selectbox('选择查询结果', range(len(results)), key='food_selected',
                                 format_func=lambda i: product_label(results[i]))
-        render_chinese_name(results[selected])
         st.write('规格：' + quantity_display(results[selected]))
         with st.columns([1, 2])[0]:
             product_photo(results[selected])
@@ -236,7 +224,6 @@ def search():
 @st.dialog('商品候选预览 · 核对后再导入', width='large', on_dismiss=close_preview)
 def preview_dialog(repo, product):
     st.subheader(name_display(product)['original'])
-    render_chinese_name(product)
     st.caption('来源：' + st.session_state.get('food_origin', '公开食品资料') + ' · 条码 ' + str(product['code']))
     st.caption('规格或实物图缺失时，可补查最新资料；若来源仍缺失，需按实物核对并补录。')
     if st.button('补查此商品的最新图片与规格', key='refresh_food_product'):
