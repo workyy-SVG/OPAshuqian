@@ -10,6 +10,7 @@ font = "sans serif"
 address = "127.0.0.1"
 maxUploadSize = 5
 headless = true
+enableStaticServing = true
 
 [browser]
 gatherUsageStats = false

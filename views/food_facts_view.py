@@ -8,7 +8,8 @@ from zoneinfo import ZoneInfo
 from config import FIELDS, Settings
 from repository import BusinessError
 from services.food_facts_service import lookup, browse, CATEGORIES, candidate_preview, import_product, ATTRIBUTION
-from services.food_facts_service import product_image_url, USER_AGENT
+from services.food_facts_service import product_image_urls, USER_AGENT
+from services.product_illustration_service import illustration_kind, ILLUSTRATIONS
 from views.common import action
 
 
@@ -40,19 +41,33 @@ def cached_product_photo(url):
 
 
 def product_photo(product):
-    url = product_image_url(product)
-    photo = cached_product_photo(url) if url else None
-    if photo:
-        st.image(photo, width='stretch')
-        st.caption('商品包装图 · Open Food Facts')
-        st.link_button('查看原图 ↗', url)
-    else:
-        st.markdown('''<div style="min-height:180px;border-radius:16px;background:#f4f7f5;
-            border:1px dashed #a5bdb3;display:flex;flex-direction:column;align-items:center;
-            justify-content:center;color:#496458;padding:16px;text-align:center">
-            <span style="font-size:44px" aria-hidden="true">▧</span>
-            <strong>替代图</strong><span style="font-size:13px;margin-top:8px">
-            暂无可用实物图<br>此处为占位示意，非商品包装</span></div>''', unsafe_allow_html=True)
+    for url in product_image_urls(product):
+        photo = cached_product_photo(url)
+        if photo:
+            st.image(photo, width='stretch')
+            st.caption('商品包装图 · Open Food Facts')
+            st.link_button('查看原图 ↗', url)
+            return
+    render_product_illustration(product)
+
+
+def render_product_illustration(product):
+    kind = illustration_kind(product)
+    if kind:
+        label, column, row = ILLUSTRATIONS[kind]
+        x, y = column * 100 / 3, row * 100 / 3
+        st.markdown(f'''<div role="img" aria-label="{label}类别示意图，非实物包装"
+            style="width:100%;aspect-ratio:1;background-color:white;border-radius:12px;
+            background-image:url('app/static/product-illustrations.png');background-size:400% 400%;
+            background-position:{x}% {y}%;background-repeat:no-repeat"></div>''', unsafe_allow_html=True)
+        st.caption(f'{label}示意图 · 非实物包装，仅表示类别')
+        return
+    st.markdown('''<div style="min-height:180px;border-radius:16px;background:#f4f7f5;
+        border:1px dashed #a5bdb3;display:flex;flex-direction:column;align-items:center;
+        justify-content:center;color:#496458;padding:16px;text-align:center">
+        <span style="font-size:44px" aria-hidden="true">▧</span>
+        <strong>暂无可用商品图</strong><span style="font-size:13px;margin-top:8px">
+        类型无法可靠判断<br>使用通用占位，避免配错图片</span></div>''', unsafe_allow_html=True)
 
 
 @st.cache_data(ttl=3600, max_entries=256, show_spinner=False)

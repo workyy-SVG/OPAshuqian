@@ -5,13 +5,16 @@ from views.food_facts_view import cached_product_photo
 
 
 def test_front_image_selection_and_untrusted_urls():
-    valid = 'https://images.openfoodfacts.org/images/products/611/test.jpg'
+    valid = 'https://images.openfoodfacts.org/images/products/611/126/696/2187/front_en.1.400.jpg'
+    product = {'code': '6111266962187'}
     assert 'image_front_url' in FIELDS.split(',')
-    assert product_image_url({'image_front_url': valid}) == valid
+    assert product_image_url({**product, 'image_front_url': valid}) == valid
     for bad in ('http://localhost/a.jpg', 'https://images.openfoodfacts.org.evil.com/images/products/a',
                 'https://user@images.openfoodfacts.org/images/products/a', 'javascript:alert(1)', None):
-        assert product_image_url({'image_front_url': bad}) is None
-    assert product_image_url({'image_front_url': '', 'image_front_small_url': valid}) == valid
+        assert product_image_url({**product, 'image_front_url': bad}) is None
+    assert product_image_url({**product, 'image_front_url': '', 'image_front_small_url': valid}) == valid
+    assert product_image_url({'code': '3017620422003', 'image_front_url': valid}) is None
+    assert product_image_url({'image_front_url': valid}) is None
 
 
 def test_photo_normalized_and_failed_photo_falls_back(monkeypatch):

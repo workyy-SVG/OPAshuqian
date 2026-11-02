@@ -21,7 +21,7 @@ from services.food_catalog_cache import read_snapshot, write_snapshot
 BASE = 'https://world.openfoodfacts.org'
 USER_AGENT = 'QianpinZhiying/1.0 (https://github.com/workyy-SVG/OPAshuqian)'
 ATTRIBUTION = 'Open Food Facts · ODbL / Database Contents License'
-FIELDS = 'code,product_name,product_name_zh,brands,quantity,ingredients_text,ingredients_text_zh,nutriments,last_modified_t,image_front_url,image_front_small_url'
+FIELDS = 'code,product_name,product_name_zh,brands,quantity,ingredients_text,ingredients_text_zh,nutriments,last_modified_t,image_front_url,image_front_small_url,categories_tags'
 _lock = threading.Lock()
 _calls: dict[str, deque[float]] = {'barcode': deque(), 'name': deque()}
 
@@ -32,8 +32,12 @@ class FoodSourceError(BusinessError):
         self.retryable = status_code in (500, 502, 503, 504) or code == 'food_network'
 
 
-def product_image_url(product: dict[str, Any]) -> str | None:
-    """Only use front images returned for this product from the OFF image host."""
+def product_image_urls(product: dict[str, Any]) -> list[str]:
+    """Require the OFF host AND an image directory belonging to this barcode."""
+    code = str(product.get('code', ''))
+    if not re.fullmatch(r'[0-9]{8,14}', code):
+        return []
+    urls = []
     for field in ('image_front_url', 'image_front_small_url'):
         value = product.get(field)
         if not isinstance(value, str):
@@ -43,10 +47,19 @@ def product_image_url(product: dict[str, Any]) -> str | None:
             if (parsed.scheme == 'https' and parsed.hostname == 'images.openfoodfacts.org'
                     and not parsed.username and not parsed.password and parsed.port in (None, 443)
                     and parsed.path.startswith('/images/products/')):
-                return value
+                directories = parsed.path.removeprefix('/images/products/').split('/')[:-1]
+                if (directories and all(re.fullmatch(r'[0-9]+', p) for p in directories)
+                        and ''.join(directories).lstrip('0') == code.lstrip('0')):
+                    if value not in urls:
+                        urls.append(value)
         except ValueError:
             continue
-    return None
+    return urls
+
+
+def product_image_url(product: dict[str, Any]) -> str | None:
+    urls = product_image_urls(product)
+    return urls[0] if urls else None
 
 
 def _reserve(kind: str) -> None:
