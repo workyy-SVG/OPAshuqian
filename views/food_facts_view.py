@@ -1,15 +1,18 @@
 """Explicit remote discovery and immediate, isolated candidate previews."""
 import streamlit as st
 import requests
+import re
 from io import BytesIO
 from PIL import Image, ImageOps, UnidentifiedImageError
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from config import FIELDS, Settings
 from repository import BusinessError
-from services.food_facts_service import lookup, browse, CATEGORIES, candidate_preview, import_product, ATTRIBUTION
+from services.food_facts_service import lookup, browse, CATEGORIES, candidate_preview, import_product, ATTRIBUTION, snapshot_id
 from services.food_facts_service import product_image_urls, USER_AGENT
 from services.product_illustration_service import illustration_kind, ILLUSTRATIONS
+from services.food_display_service import name_display, quantity_display, source_quantity
+from html import escape
 from views.common import action
 
 
@@ -80,8 +83,19 @@ def cached_catalog(category, subcategory, page):
 
 
 def product_label(product):
-    name = product.get('product_name_zh') or product.get('product_name') or '未命名商品'
-    return f"{name} · {product.get('brands') or '品牌未提供'} · {product.get('quantity') or '规格未提供'} · {product['code']}"
+    names = name_display(product)
+    chinese = ('参考中文：' if '非官方译名' in names['label'] else '') + names['chinese']
+    name = chinese + (' / ' + names['original'] if names['original'] != names['chinese'] else '')
+    return f"{name} · {product.get('brands') or '品牌未提供'} · {quantity_display(product)} · {product['code']}"
+
+
+def render_chinese_name(product):
+    names = name_display(product)
+    st.markdown(f'''<div class="qp-chinese-name" style="background:#eaf3ff;color:#123a63;
+        border-left:4px solid #245ca6;border-radius:8px;padding:10px 12px;margin:8px 0;
+        font-size:16px;font-weight:700;line-height:1.65;overflow-wrap:anywhere">
+        <span style="display:block;font-size:12px;font-weight:600;color:#123a63">{escape(names['label'])}</span>
+        <span>{escape(names['chinese'])}</span></div>''', unsafe_allow_html=True)
 
 
 def close_preview():
@@ -164,9 +178,10 @@ def catalog(prefix='catalog', show_cards=True):
             with columns[index % 2], st.container(border=True):
                 details, picture = st.columns([3, 2], vertical_alignment='center')
                 with details:
-                    st.write('**' + str(product.get('product_name_zh') or product.get('product_name') or '未命名商品') + '**')
+                    st.write('**' + name_display(product)['original'] + '**')
+                    render_chinese_name(product)
                     st.caption(f"条码 {product['code']} · {product.get('brands') or '品牌未提供'}")
-                    st.write('包装：' + str(product.get('quantity') or '未提供'))
+                    st.write('规格：' + quantity_display(product))
                 with picture:
                     product_photo(product)
                 st.button('选择此商品，查看候选预览', key=f"catalog_pick:{index}:{product['code']}",
@@ -210,6 +225,8 @@ def search():
     if results:
         selected = st.selectbox('选择查询结果', range(len(results)), key='food_selected',
                                 format_func=lambda i: product_label(results[i]))
+        render_chinese_name(results[selected])
+        st.write('规格：' + quantity_display(results[selected]))
         with st.columns([1, 2])[0]:
             product_photo(results[selected])
         st.button('查看查询商品的候选预览', key='search_preview', on_click=select_catalog_product,
@@ -218,17 +235,34 @@ def search():
 
 @st.dialog('商品候选预览 · 核对后再导入', width='large', on_dismiss=close_preview)
 def preview_dialog(repo, product):
-    st.subheader(str(product.get('product_name_zh') or product.get('product_name') or '未命名商品'))
+    st.subheader(name_display(product)['original'])
+    render_chinese_name(product)
     st.caption('来源：' + st.session_state.get('food_origin', '公开食品资料') + ' · 条码 ' + str(product['code']))
+    st.caption('规格或实物图缺失时，可补查最新资料；若来源仍缺失，需按实物核对并补录。')
+    if st.button('补查此商品的最新图片与规格', key='refresh_food_product'):
+        try:
+            with st.spinner('正在按当前条码补查最新资料…'):
+                latest = lookup(str(product['code']), 'barcode')
+            same_product = next((p for p in latest if str(p['code']).lstrip('0') == str(product['code']).lstrip('0')), None)
+            if same_product:
+                st.session_state['food_preview_product'] = same_product
+                st.session_state['food_preview_refreshed'] = True
+                st.rerun()
+            st.info('未查到对应商品的新资料，保留当前预览。')
+        except BusinessError as exc:
+            st.warning('本次补查未成功，保留当前资料：' + str(exc))
+    if st.session_state.pop('food_preview_refreshed', False):
+        st.success('已按当前条码补查。请重新核对资料；来源仍缺失的字段不会猜填。')
     with st.columns([1, 2])[0]:
         product_photo(product)
     st.info('这里只是预览，尚未导入。请核对商品身份，勾选确认后再保存为候选。')
-    st.caption(f"品牌参考：{product.get('brands') or '来源未提供'} · 包装规格：{product.get('quantity') or '来源未提供'}")
+    st.caption(f"品牌参考：{product.get('brands') or '来源未提供'}")
+    st.write('规格：' + quantity_display(product))
     st.link_button('在 Open Food Facts 查看来源', f"https://world.openfoodfacts.org/product/{product['code']}")
     with st.expander('查看本次来源原始字段（含营养信息）'):
         st.json(product)
     code = product['code']
-    with st.form(f'food_candidate:{code}'):
+    with st.form(f'food_candidate:{code}:{snapshot_id(product)}'):
         sku = st.text_input('导入到SKU', value=f'OFF-{code}', max_chars=80,
                             help='默认创建独立演示SKU。只有核实为同一商品后，才填写已有SKU。')
         version = st.text_input('产品版本', value='V1', max_chars=80)
@@ -241,8 +275,8 @@ def preview_dialog(repo, product):
             missing = [FIELDS[key] for key in ('product_name', 'net_weight_g', 'ingredients_text') if key not in provided]
             if missing:
                 st.warning('来源缺失或无法解析：' + '、'.join(missing) + '。请通过CSV或手工补录，核对后再确认。')
-            quantity = str(product.get('quantity') or '')
-            if 'net_weight_g' not in provided and any(unit in quantity.lower() for unit in ('ml', 'cl', '毫升', '升')):
+            quantity = source_quantity(product)
+            if 'net_weight_g' not in provided and re.search(r'\d\s*(?:ml|cl|l)\b|毫升|厘升|升', quantity, re.I):
                 st.info(f'包装“{quantity}”标的是体积，不能直接当作克重。可先导入已有名称和配料，再按实物补充重量资料。')
         except BusinessError as exc:
             st.warning(str(exc))

@@ -21,9 +21,9 @@ NAME_RULES = [
     ('juice', r'果汁|蔬菜汁|番茄汁|橙汁|苹果汁|\bjuice\b'),
     ('yogurt', r'酸奶|酸乳|\b(yogurt|yoghurt|yogourt)\b'),
     ('cheese', r'奶酪|芝士|干酪|\b(cheese|fromage)\b'),
-    ('soda', r'汽水|可乐|碳酸饮料|\b(soda|cola|lemonade)\b'),
+    ('soda', r'汽水|可乐|碳酸饮料|\b(soda|cola)\b'),
     ('milk', r'牛奶|纯奶|鲜奶|全脂奶|脱脂奶|豆奶|燕麦奶|椰奶|\b(milk|lait|milkshake)\b'),
-    ('water', r'饮用水|矿泉水|纯净水|苏打水|气泡水|\b(water|eau)\b'),
+    ('water', r'饮用水|矿泉水|纯净水|苏打水|气泡水|mineralwasser|\b(water|seltzer|eau|voda)\b'),
     ('vegetables', r'蔬菜|白菜|生菜|菠菜|西兰花|胡萝卜|番茄|黄瓜|土豆|洋葱|芹菜|青椒|茄子|\b(vegetables?|carrots?|broccoli|spinach|lettuce|tomatoes|tomato|cucumber|onion|potato)\b'),
     ('fruit', r'水果|苹果|橙子|香蕉|草莓|葡萄|柠檬|\b(fruit|apple|orange|banana|strawberry|grapes?|lemon)\b'),
     ('fish', r'鱼|虾|蟹|水产|\b(fish|salmon|tuna|shrimp|seafood)\b'),
@@ -38,6 +38,7 @@ TAG_RULES = {
     'en:sodas': 'soda', 'en:meats': 'meat', 'en:seafood': 'fish', 'en:eggs': 'eggs',
     'en:snacks': 'snacks', 'en:condiments': 'condiments', 'en:prepared-meals': 'meals',
     'en:milk-powders': 'powder',
+    'en:carbonated-waters': 'water', 'en:mineral-waters': 'water',
 }
 
 

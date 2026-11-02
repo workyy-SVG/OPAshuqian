@@ -17,11 +17,12 @@ from repository import BusinessError, Repository
 from services.import_service import COLUMNS, preview_import, commit_import
 from services.unit_service import normalize_weight
 from services.food_catalog_cache import read_snapshot, write_snapshot
+from services.food_display_service import source_quantity
 
 BASE = 'https://world.openfoodfacts.org'
 USER_AGENT = 'QianpinZhiying/1.0 (https://github.com/workyy-SVG/OPAshuqian)'
 ATTRIBUTION = 'Open Food Facts · ODbL / Database Contents License'
-FIELDS = 'code,product_name,product_name_zh,brands,quantity,ingredients_text,ingredients_text_zh,nutriments,last_modified_t,image_front_url,image_front_small_url,categories_tags'
+FIELDS = 'code,product_name,product_name_zh,generic_name_zh,brands,quantity,product_quantity,product_quantity_unit,ingredients_text,ingredients_text_zh,nutriments,last_modified_t,image_front_url,image_front_small_url,image_url,image_small_url,selected_images,categories_tags'
 _lock = threading.Lock()
 _calls: dict[str, deque[float]] = {'barcode': deque(), 'name': deque()}
 
@@ -38,8 +39,21 @@ def product_image_urls(product: dict[str, Any]) -> list[str]:
     if not re.fullmatch(r'[0-9]{8,14}', code):
         return []
     urls = []
-    for field in ('image_front_url', 'image_front_small_url'):
+    candidates = [product.get(field) for field in ('image_front_url', 'image_front_small_url')]
+    selected = product.get('selected_images')
+    front = selected.get('front') if isinstance(selected, dict) else None
+    if isinstance(front, dict):
+        for size in ('display', 'small'):
+            languages = front.get(size)
+            if isinstance(languages, dict):
+                for language in dict.fromkeys(['zh', 'en', *sorted(str(k) for k in languages)]):
+                    candidates.append(languages.get(language))
+    for field in ('image_url', 'image_small_url'):
         value = product.get(field)
+        # Generic image fields are only accepted if their filename explicitly identifies a front image.
+        if isinstance(value, str) and re.search(r'/front_[^/?#]+(?:[?#].*)?$', value):
+            candidates.append(value)
+    for value in candidates:
         if not isinstance(value, str):
             continue
         try:
@@ -54,7 +68,7 @@ def product_image_urls(product: dict[str, Any]) -> list[str]:
                         urls.append(value)
         except ValueError:
             continue
-    return urls
+    return urls[:4]
 
 
 def product_image_url(product: dict[str, Any]) -> str | None:
@@ -177,7 +191,7 @@ def candidate_preview(product: dict[str, Any], sku: str, version: str) -> dict[s
         raise BusinessError('数据源条码无效，请重新查询。')
     values = {'product_name': product.get('product_name_zh') or product.get('product_name'),
               'ingredients_text': product.get('ingredients_text_zh') or product.get('ingredients_text')}
-    quantity = product.get('quantity')
+    quantity = source_quantity(product)
     weight = re.fullmatch(r'(\d+(?:\.\d+)?\s*(?:mg|kg|毫克|千克|公斤|g|克|斤|两))\s*[e℮]?', quantity.strip(), re.I) if isinstance(quantity, str) else None
     if weight:
         try:
