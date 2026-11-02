@@ -75,7 +75,15 @@ def render(repo, product_id, operator):
                 for old in row['history']:
                     st.caption(f"内容 #{old['id']} / R{old['revision']} / {STATES[old['state']]}")
                     content_card(old['title'],old['body'],old['state'])
-    with st.expander('需要调价或纠错？查看当前确认资料及撤回操作', expanded=False):
+    st.subheader('更新资料')
+    left, right = st.columns(2)
+    def open_entry(field):
+        st.session_state['focused_manual_field'] = field
+        st.session_state['next_product'] = product_id
+        st.session_state['pending_navigation'] = '产品资料'
+    left.button('修改价格', key='impact_change_price', type='primary', on_click=open_entry, args=('price_cent',), width='stretch')
+    right.button('纠正其他资料', key='impact_correct_fact', on_click=navigate, args=('产品资料',), width='stretch')
+    with st.expander('撤回不再可靠的资料（维护操作）', expanded=False):
         render_fact_actions(repo, product_id, operator)
     with st.expander('完整字段修订与变更事件'):
         state_table(queries.fact_history(repo, product_id))
@@ -83,8 +91,7 @@ def render(repo, product_id, operator):
 
 
 def render_fact_actions(repo, product_id, operator):
-    st.caption('需要调价或纠错时，先补录新来源，再到数据核对页确认。')
-    next_button('去补录新的产品资料', '产品资料', 'impact:source')
+    st.caption('撤回只用于资料本身不再可靠；普通调价请使用上方“修改价格”。')
     facts = fact_table(repo, product_id)
     if facts:
         with st.container(border=True):

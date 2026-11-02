@@ -60,19 +60,22 @@ def flow_diagram(nodes):
 
 def render(repo=None, product_id=None, operator=None):
     st.title('使用教程')
-    st.write('先看流程图，再按图中编号查操作步骤。矩形告诉你做什么，菱形告诉你什么时候要返回处理。')
+    st.write('先选择要完成的任务，照着当前任务一步一步操作；流程图放在进阶说明中。')
     topic = st.session_state.pop('next_tutorial_topic', None)
     if topic in LESSONS:
         st.session_state['tutorial_topic'] = topic
-    topic = st.selectbox('想学习哪个模块？', list(LESSONS), key='tutorial_topic')
+    tasks = {'第一次录商品':'产品资料','批量导入商品':'产品资料','生成并审核文案':'内容工作台','修改价格并更新文案':'变更追踪','处理资料冲突':'数据核对'}
+    def choose_task():
+        st.session_state['tutorial_topic'] = tasks[st.session_state['tutorial_task']]
+    st.radio('这次想完成什么？', list(tasks), horizontal=True, key='tutorial_task', on_change=choose_task)
+    topic = st.selectbox('按模块查找（进阶）', list(LESSONS), key='tutorial_topic')
     lesson = LESSONS[topic]
     st.info('作用：'+lesson['purpose'])
     st.markdown('**进入前准备：** '+lesson['input'])
-    chart_tab, problem_tab = st.tabs(['流程图与操作步骤','遇到问题怎么处理'])
+    chart_tab, problem_tab = st.tabs(['当前任务操作步骤','遇到问题与进阶流程图'])
     with chart_tab:
-        from views.workflow_charts import render_chart, FLOWS
-        render_chart(topic)
-        st.subheader('对照流程编号，按下面步骤操作')
+        from views.workflow_charts import FLOWS
+        st.subheader('按下面步骤操作')
         for i,operation in enumerate(PROCEDURES[topic],1):
             location, task, click, result = operation
             with st.container(border=True):
@@ -86,6 +89,9 @@ def render(repo=None, product_id=None, operator=None):
             st.markdown('**'+question+'**')
             st.write(answer)
         st.warning('没有可靠依据时先补资料，不要为了完成流程猜测字段或随意通过审核。')
+        with st.expander('查看完整流程图'):
+            from views.workflow_charts import render_chart
+            render_chart(topic)
     st.success('完成标志：'+lesson['done'])
     next_button('去'+topic+'实际操作', topic, 'tutorial:practice:'+topic)
     st.download_button('下载完整使用说明', _manual().encode('utf-8'), '黔品智营使用教程.md','text/markdown')

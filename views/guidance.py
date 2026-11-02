@@ -35,12 +35,12 @@ def apply_theme():
     [data-testid="stMetric"] {padding: 1rem 1.2rem; background: #fff; border: 1px solid #dde5d9; border-radius: 16px;}
     [data-testid="stForm"] {background: #fff; border-radius: 16px;}
     [data-testid="stExpander"] {background: #fff; border-radius: 14px;}
-    .qp-hero {position:relative; overflow:hidden; padding: 28px 32px; border-radius:22px; background:linear-gradient(115deg,#173f31,#31664b); color:#fff; margin: 10px 0 22px;}
+    .qp-hero {position:relative; overflow:hidden; padding:18px 24px; border-radius:18px; background:linear-gradient(115deg,#173f31,#31664b); color:#fff; margin:6px 0 12px;}
     .qp-hero:after {content:'';position:absolute;right:-40px;top:-110px;width:290px;height:290px;border:45px solid #ffffff0b;border-radius:50%;pointer-events:none;}
     .qp-eyebrow {font-size:12px;letter-spacing:.18em;color:#dbb987;margin-bottom:8px;}
-    .qp-hero h1 {font-size:32px;margin:0 0 8px;color:#fff;letter-spacing:.03em;}
+    .qp-hero h1 {font-size:27px;margin:0 0 4px;color:#fff;letter-spacing:.03em;}
     .qp-hero p {margin:0;color:#e2eddf;font-size:15px;max-width:85%;}
-    .qp-context {display:inline-block;margin-top:18px;padding:5px 12px;background:#ffffff15;border:1px solid #ffffff26;border-radius:30px;font-size:12px;}
+    .qp-context {display:inline-block;margin-top:9px;padding:4px 10px;background:#ffffff15;border:1px solid #ffffff26;border-radius:30px;font-size:12px;}
     .qp-step-no {color:#a46b2b;font-size:12px;letter-spacing:.1em;margin-bottom:4px;}
     .qp-step-title {font-weight:650;color:#244e39;margin-bottom:6px;font-size:16px;}
     .qp-step-copy {font-size:13px;line-height:1.7;color:#627260;}
