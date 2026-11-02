@@ -29,18 +29,18 @@ def next_button(label, page, key):
 def apply_theme():
     st.markdown('''<style>
     .stApp {background: #f7f8f3;}
-    .block-container {max-width: 1280px; padding-top: 2rem; padding-bottom: 3rem;}
+    .block-container {max-width: 1180px; padding-top: 1.25rem; padding-bottom: 3rem;}
     [data-testid="stSidebar"] {background: #eaf0e8; border-right: 1px solid #d6e1d4;}
     h1,h2,h3 {letter-spacing: -.035em; color: #193d30;}
-    [data-testid="stMetric"] {padding: 1rem 1.2rem; background: #fff; border: 1px solid #dde5d9; border-radius: 16px;}
+    [data-testid="stMetric"] {padding: .65rem 1rem; background: #fff; border: 1px solid #dde5d9; border-radius: 12px;}
     [data-testid="stForm"] {background: #fff; border-radius: 16px;}
     [data-testid="stExpander"] {background: #fff; border-radius: 14px;}
-    .qp-hero {position:relative; overflow:hidden; padding:18px 24px; border-radius:18px; background:linear-gradient(115deg,#173f31,#31664b); color:#fff; margin:6px 0 12px;}
+    .qp-hero {position:relative; overflow:hidden; padding:14px 20px; border-radius:14px; background:linear-gradient(115deg,#173f31,#31664b); color:#fff; margin:4px 0 8px;}
     .qp-hero:after {content:'';position:absolute;right:-40px;top:-110px;width:290px;height:290px;border:45px solid #ffffff0b;border-radius:50%;pointer-events:none;}
     .qp-eyebrow {font-size:12px;letter-spacing:.18em;color:#dbb987;margin-bottom:8px;}
-    .qp-hero h1 {font-size:27px;margin:0 0 4px;color:#fff;letter-spacing:.03em;}
+    .qp-hero h1 {font-size:26px!important;line-height:1.25;padding:0!important;margin:0 0 4px;color:#fff;letter-spacing:.03em;}
     .qp-hero p {margin:0;color:#e2eddf;font-size:15px;max-width:85%;}
-    .qp-context {display:inline-block;margin-top:9px;padding:4px 10px;background:#ffffff15;border:1px solid #ffffff26;border-radius:30px;font-size:12px;}
+    .qp-context {display:inline-block;margin-top:6px;padding:3px 9px;background:#ffffff15;border:1px solid #ffffff26;border-radius:20px;font-size:12px;}
     .qp-step-no {color:#a46b2b;font-size:12px;letter-spacing:.1em;margin-bottom:4px;}
     .qp-step-title {font-weight:650;color:#244e39;margin-bottom:6px;font-size:16px;}
     .qp-step-copy {font-size:13px;line-height:1.7;color:#627260;}
@@ -69,6 +69,7 @@ def apply_theme():
     @media(max-width:700px){.qp-hero{margin:4px 0 10px!important;padding:14px 18px!important}.qp-hero h1{font-size:24px!important;padding:0!important;margin:0!important}.qp-hero p,.qp-hero .qp-context{display:none}.qp-progress-nav span{font-size:12px}}
     @media(max-width:700px){.qp-content-card{padding:16px}.qp-prose{font-size:15px}[data-testid="stHorizontalBlock"]{flex-wrap:wrap}[data-testid="stColumn"]{min-width:min(100%,240px);flex:1 1 240px}.qp-hero p{max-width:100%}}
     @media(max-width:700px){.block-container{padding-top:1.4rem}.qp-hero{padding:22px}.qp-hero h1{font-size:28px}.qp-hero p{max-width:100%}}
+    @media(max-width:700px){.st-key-workspace-nav [data-testid="stColumn"]{min-width:140px!important;flex:1 1 140px!important}.st-key-workspace-metrics [data-testid="stColumn"]{min-width:90px!important;flex:1 1 90px!important}.st-key-workspace-metrics [data-testid="stMetric"]{padding:8px}.st-key-workspace-metrics [data-testid="stMetricValue"]{font-size:24px}}
     </style>''', unsafe_allow_html=True)
 
 
@@ -81,21 +82,10 @@ def workspace_header(page, product=None, progress=None):
         context = '从导入第一份资料开始'
     st.markdown(f'''<section class="qp-hero"><div class="qp-eyebrow">黔品智营 / {module['tag']} / {module['number']}</div>
         <h1>{page}</h1><p>{module['summary']}</p><span class="qp-context">{escape(context)}</span></section>''', unsafe_allow_html=True)
-    goals = {'产品资料':('收集有来源的资料，保存为待确认候选','数据核对'),
-             '数据核对':('查证候选，记录依据，确认名称和净含量','内容工作台'),
-             '内容工作台':('使用确认资料生成草稿，人工审核后下载','变更追踪'),
-             '变更追踪':('检查变化影响，更新关联文案并重新审核','内容工作台')}
-    goal, following = goals[page]
-    st.caption(f'本页目标：{goal}。'+('下载后完成本轮工作；后续调价或纠错再进入变更追踪。' if page=='内容工作台' else f'完成后进入：{following}。'))
-    steps = ''.join(f'<span aria-current="{"step" if name == page else "false"}">{m["number"]} {name}</span>' for name, m in MODULES.items())
-    st.markdown(f'<nav class="qp-progress-nav" aria-label="业务流程">{steps}</nav>', unsafe_allow_html=True)
-    with st.expander('查看流程进度与跨模块跳转',expanded=False):
+    with st.container(key='workspace-nav'):
         for col, name in zip(st.columns(4), MODULES):
-            with col:
-                done = bool(progress and progress['steps'][list(MODULES).index(name)])
-                st.caption('✓ 已完成' if done else '● 当前环节' if name==page else '○ 待进行')
-                st.button(f"{MODULES[name]['number']} · {name}", key='step:'+name, type='primary' if name == page else 'secondary',
-                          on_click=navigate, args=(name,), width='stretch')
+            col.button(f"{MODULES[name]['number']} · {name}", key='step:'+name,
+                       type='primary' if name == page else 'secondary', on_click=navigate, args=(name,), width='stretch')
     if st.session_state.get('show_module_guide', True):
         with st.expander('本模块怎么用 · 三步上手', expanded=False):
             for i, (col, (title, description)) in enumerate(zip(st.columns(3), module['steps']), 1):
@@ -108,7 +98,6 @@ def workspace_header(page, product=None, progress=None):
                 st.session_state['next_tutorial_topic'] = page
                 navigate('使用教程')
             st.button('查看本模块完整流程图与操作说明',key='module_tutorial:'+page,on_click=open_module_tutorial)
-    st.write('')
 
 
 def product_overview(progress):

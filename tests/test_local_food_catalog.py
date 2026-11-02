@@ -27,6 +27,7 @@ def test_food_card_opens_separate_detail_and_returns(tmp_path, monkeypatch):
          'url': 'https://zh.wikipedia.org/wiki/example', 'image': ''}
     ])
     app = AppTest.from_file(str(ROOT / 'app.py'), default_timeout=20).run()
+    app.text_input(key='local_food_keyword').set_value('刺梨汁').run()
     app.button(key='local_food:刺梨汁').click().run()
     assert not app.exception
     assert app.button(key='local_food_back')

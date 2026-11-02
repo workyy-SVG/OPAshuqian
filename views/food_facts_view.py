@@ -317,6 +317,10 @@ def render(repo):
 
 
 def local_catalog():
+    # The detail page hides the list widgets. Preserve their filter/page state on return.
+    for key in list(st.session_state):
+        if key in ('local_food_category', 'local_food_keyword') or key.startswith('local_food_page:'):
+            st.session_state[key] = st.session_state[key]
     selected_name = st.session_state.get('local_food_selected')
     if isinstance(selected_name, dict):
         selected_name = selected_name.get('name')
@@ -333,12 +337,15 @@ def local_catalog():
     category = left.selectbox('中文食品分类', local_categories(), key='local_food_category')
     keyword = right.text_input('搜索中文食品', placeholder='例如：刺梨、酸汤、羊肉粉、辣椒', key='local_food_keyword')
     foods = search_foods(category, keyword)
-    st.caption(f'当前显示 {len(foods)} 项；均为选品方向，不代表具体在售商品。')
+    st.caption(f'共 {len(foods)} 项；均为选品方向，不代表具体在售商品。每页最多6项。')
     if not foods:
         st.info('没有匹配项。可清空关键词或切换分类。')
         return
+    pages = (len(foods) + 5) // 6
+    page_key = 'local_food_page:' + category + ':' + keyword
+    page = st.number_input('食品列表页码', min_value=1, max_value=max(pages, 1), value=1, step=1, key=page_key)
     columns = st.columns(2)
-    for index, food in enumerate(foods):
+    for index, food in enumerate(foods[(page-1)*6:page*6]):
         with columns[index % 2], st.container(border=True):
             st.write('**' + food['name'] + '**')
             st.caption(food['region'] + ' · ' + food['kind'])
@@ -346,7 +353,7 @@ def local_catalog():
             if st.button('查看在线中文资料', key='local_food:' + food['name']):
                 st.session_state['local_food_selected'] = food['name']
                 st.rerun()
-            st.caption('下一步：取得真实包装后，通过“手动补录”或CSV录入名称、规格、配料和价格。')
+    st.caption('取得真实包装后，在“手动补录”或CSV录入具体商品资料。')
 
 
 def render_local_food_detail(food):

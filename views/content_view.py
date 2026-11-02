@@ -21,7 +21,10 @@ def render(repo, product_id, operator, quota_repo=None, session_id=None):
         empty_state('准备好资料，就能生成第一份内容', '先导入来源，再确认名称与净含量。', '去准备产品资料', '产品资料', 'content:import')
         return
     current = queries.current_facts(repo, product_id)
-    create_tab, history_tab = st.tabs(["① 生成内容", "② 审核与导出"])
+    if st.session_state.get('focused_content'):
+        st.session_state['content_workspace_tab'] = '② 审核与导出'
+    create_tab, history_tab = st.tabs(["① 生成内容", "② 审核与导出"],
+                                     key='content_workspace_tab', on_change='rerun')
     with create_tab:
         left, right = st.columns([3, 2])
         with left:
@@ -30,8 +33,9 @@ def render(repo, product_id, operator, quota_repo=None, session_id=None):
             context = st.selectbox('价格渠道', available_channels(repo, product_id), format_func=display_context, key='generate_channel')
             include_price = st.checkbox("加入该渠道价格", value=any(f['field']=='price_cent' and f['context']==context for f in current),
                                         key=f'include-price:{product_id}:{context}', help='未确认价格时可以先关闭，用名称和重量体验流程。')
-            optional = st.multiselect("加入已确认的说明字段", ["ingredients_text", "usage_text", "storage_text"],
-                                      default=["ingredients_text", "usage_text", "storage_text"], format_func=FIELDS.get)
+            with st.expander('可选说明字段', expanded=False):
+                optional = st.multiselect("加入已确认的说明字段", ["ingredients_text", "usage_text", "storage_text"],
+                                          default=["ingredients_text", "usage_text", "storage_text"], format_func=FIELDS.get)
             labels = {"template": "模板模式（不调用模型）", "deepseek": "DeepSeek 实时生成", "qwen": "通义千问实时生成"}
             st.markdown('**2 · 选择生成方式**')
             mode = st.radio("生成方式", list(labels), format_func=labels.get, horizontal=True)
@@ -66,8 +70,14 @@ def render(repo, product_id, operator, quota_repo=None, session_id=None):
             st.subheader("本次生成依据")
             if basis:
                 for fact in basis["snapshot"]["facts"]:
-                    st.write(f"**{FIELDS[fact['field']]}**：{display_value(fact['field'], fact['value'])}")
-                    st.caption(f"{display_context(fact['context'])} · 字段修订 #{fact['fact_revision_id']}")
+                    value = display_value(fact['field'], fact['value'])
+                    if fact['field'] in ('product_name', 'net_weight_g', 'price_cent'):
+                        st.write(f"**{FIELDS[fact['field']]}**：{value}")
+                    else:
+                        with st.expander(FIELDS[fact['field']]):
+                            st.write(value)
+                            st.caption(f"{display_context(fact['context'])} · 字段修订 #{fact['fact_revision_id']}")
+                st.caption('来源与字段修订保存在每份草稿的输入快照中。')
                 if basis["missing"]:
                     st.warning("请先补齐或处理冲突：" + "、".join(FIELDS[f] for f in basis["missing"]))
                 if basis["conflicts"]:

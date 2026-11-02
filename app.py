@@ -6,7 +6,7 @@ from config import Settings
 from services.bootstrap_service import get_repository, cached_products, database_token
 from views.access_view import authorize
 from views import product_view, quality_view, content_view, impact_view
-from views.guidance import apply_theme, workspace_header, product_overview
+from views.guidance import apply_theme, workspace_header
 from services.experience_service import overview
 from services import query_service as queries
 from views.components import notifications
@@ -73,6 +73,7 @@ with st.sidebar:
         product_id = None
         st.info("导入样例或新增一个产品开始。")
     def open_new_product():
+        st.session_state.pop('focused_manual_field', None)
         st.session_state['focused_new_product'] = True
         st.session_state['pending_navigation'] = '产品资料'
     st.button('＋ 新建商品', key='sidebar_new_product', on_click=open_new_product, width='stretch')
@@ -97,9 +98,6 @@ apply_background()
 progress = overview(repo, product_id)
 if page != '使用教程':
     workspace_header(page, product_map.get(product_id), progress)
-if product_id and page == '产品资料':
-    with st.expander('当前产品的完成情况', expanded=False):
-        product_overview(progress)
 from views import tutorial_view
 {
     "使用教程": tutorial_view.render,

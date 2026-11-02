@@ -194,7 +194,9 @@ def create_basic_product(repo: Repository, name: str, weight: str, source: str,
         writer.writerow(dict(sku=sku, product_version=version, field_key=field, raw_value=raw,
                              context_key='general', source_label=source, source_locator=locator,
                              effective_from=''))
-    result = commit_import(repo, preview_import(output.getvalue().encode('utf-8-sig')), '新建商品向导.csv')
+    preview = preview_import(output.getvalue().encode('utf-8-sig'))
+    _validate_manual_preview(preview)
+    result = commit_import(repo, preview, '新建商品向导.csv')
     if not result['product_ids']:
         raise BusinessError('商品资料未能保存。')
     return {**result, 'product_id': result['product_ids'][0], 'sku': sku}
@@ -215,12 +217,23 @@ def add_manual_batch(repo: Repository, product_id: int, values: dict[str, str], 
         writer.writerow(dict(sku=product['sku'],product_version=product['version'],field_key=field,
             raw_value=raw,context_key=price_context if field=='price_cent' else 'general',
             source_label=source,source_locator=locator,effective_from=''))
-    result = commit_import(repo, preview_import(output.getvalue().encode('utf-8-sig')), '基础资料补录.csv')
+    preview = preview_import(output.getvalue().encode('utf-8-sig'))
+    _validate_manual_preview(preview)
+    result = commit_import(repo, preview, '基础资料补录.csv')
     with repo.connect(write=True) as db:
         for row in db.execute('SELECT id FROM observations WHERE source_id=?', (result['source_id'],)):
             db.execute('INSERT INTO observation_actions(observation_id,action,operator,reason,created_at) VALUES(?,?,?,?,?)',
                        (row[0], 'manual', operator.strip(), reason.strip(), now()))
     return result
+
+
+def _validate_manual_preview(preview: dict[str, Any]) -> None:
+    """Interactive forms must validate every field before writing any source."""
+    errors = list(preview['errors'])
+    errors.extend(f"{FIELDS.get(row['field_key'], row['field_key'])}：{row['error']}"
+                  for row in preview['rows'] if row['error'])
+    if errors:
+        raise BusinessError('；'.join(errors))
 
 
 def add_manual(repo: Repository, product_id: int, field: str, raw: str, context: str, source_label: str, reason: str, operator: str, effective_from: str = "") -> int:

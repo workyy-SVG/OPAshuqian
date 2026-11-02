@@ -9,8 +9,7 @@ from services import query_service as queries
 
 
 def render(repo, product_id, operator):
-    st.write("先选择一种收集方式；保存后进入待确认候选，人工核对后才用于生成。")
-    st.caption('收集来源 → 预览并保存 → 检查候选 → 进入数据核对')
+    st.caption('选择录入方式，保存为待确认候选后进入数据核对。')
     if st.session_state.get('focused_new_product', False):
         render_new_product(repo)
         return
@@ -18,15 +17,18 @@ def render(repo, product_id, operator):
     if focused_field and product_id:
         render_focused_manual(repo, product_id, operator, focused_field)
         return
-    st.subheader('① 收集与保存资料')
-    tabs = st.tabs(["公开食品资料", "CSV 导入", "手动补录", "来源与历史"])
+    manual_tab, csv_tab, public_tab, source_tab = st.tabs(
+        ["手动补录", "CSV 导入", "公开食品资料", "来源与历史"], key='product_workspace_tab', on_change='rerun')
+    tabs = [public_tab, csv_tab, manual_tab, source_tab]
     with tabs[1]:
         st.subheader('上传你已有的产品资料')
         st.caption('适合已有商品清单：下载模板 → 按行填写 → 上传预览 → 确认导入。')
-        col1, col2 = st.columns([3, 1])
+        col1, col2 = st.columns([2, 1], gap='large')
         with col1:
-            upload = st.file_uploader("上传长表 CSV", type=["csv"], help="最大5MB、最多20000条；每行一条来源陈述，SKU按字符串处理。")
-            encoding = st.selectbox("文件编码", ["utf-8-sig", "gb18030"], format_func=lambda v: "UTF-8（推荐）" if v == "utf-8-sig" else "GB18030（手动选择）")
+            upload = st.file_uploader("上传 CSV", type=["csv"], help="支持中文一行一商品模板和字段长表；最大5MB、最多20000条，SKU按字符串处理。")
+            with st.expander('文件编码与字段说明'):
+                encoding = st.selectbox("文件编码", ["utf-8-sig", "gb18030"], format_func=lambda v: "UTF-8（推荐）" if v == "utf-8-sig" else "GB18030（手动选择）")
+                st.caption('重量填写200g或0.2kg；价格按元填写，例如12.00。')
         with col2:
             st.download_button("下载空白模板", (ROOT / "samples/template.csv").read_bytes(), "黔品智营资料模板.csv", "text/csv")
             wide = 'SKU,产品版本,商品名称,净含量,零售价格,配料,使用方法,储存说明,来源说明,来源位置,适用日期\n001,V1,示例商品,200g,12.00,,,,包装标签,包装正面,\n'
@@ -77,7 +79,7 @@ def render(repo, product_id, operator):
                 st.rerun()
         st.caption("固定字段：product_name、net_weight_g、price_cent、ingredients_text、usage_text、storage_text。价格原文按元填写。")
     with tabs[2]:
-        st.subheader('逐项补充包装或价目表信息')
+        st.subheader('录入当前商品的包装或价目表资料')
         with st.expander("新增 SKU / 产品版本", expanded=not product_id):
             with st.form("new_product"):
                 sku = st.text_input("SKU", placeholder="如 P001，保留前导零")
@@ -88,103 +90,122 @@ def render(repo, product_id, operator):
                         st.session_state["next_product"] = new_id
                         st.rerun()
         if product_id:
-            with st.expander('一次填写商品基础资料', expanded=True):
-                with st.form('basic_product_observations'):
-                    name = st.text_input('产品名称')
-                    weight = st.text_input('净含量', placeholder='例如：200g')
+            with st.container(border=True):
+                st.markdown('**基础资料 · 可一次保存多项**')
+                with st.form(f'basic_product_observations:{product_id}'):
+                    left, right = st.columns(2)
+                    name = left.text_input('产品名称')
+                    weight = right.text_input('净含量', placeholder='例如：200g')
                     ingredients = st.text_area('配料原文（可留空）')
-                    price = st.text_input('零售价格（可留空，按元填写）', placeholder='例如：12.00')
-                    source = st.text_input('共同来源说明', placeholder='例如：产品包装标签')
+                    left, right = st.columns(2)
+                    price = left.text_input('零售价格（可留空，按元填写）', placeholder='例如：12.00')
+                    source = right.text_input('共同来源说明', placeholder='例如：产品包装标签')
                     reason = st.text_input('补录原因', value='首次录入产品基础资料')
                     if st.form_submit_button('保存以上资料为待确认候选', type='primary'):
                         ok, _ = action(lambda: add_manual_batch(repo, product_id,
                             {'product_name':name,'net_weight_g':weight,'ingredients_text':ingredients,'price_cent':price},
                             source, reason, operator))
-                        if ok: st.rerun()
-            with st.form("manual_observation"):
-                st.markdown('**1 · 填写包装或价目表上的信息**')
-                field = st.selectbox("字段", list(FIELDS), format_func=FIELDS.get, help='选择你要补充的一项产品信息，每次保存一项。')
-                raw = st.text_area("来源原文", placeholder='例如：200g、12.00，或包装上的配料说明', help="重量可填200g或0.2kg；金额填写元，例如12.00。")
-                if field == 'price_cent':
-                    scope = st.selectbox('价格渠道', ['retail', 'wholesale'], format_func=display_context)
-                    custom_scope = st.text_input('其他价格渠道（可留空）', help='例如门店A。')
-                    context = custom_scope.strip() or scope
-                else:
-                    context = 'general'
-                st.markdown('**2 · 标明来源与补录原因**')
-                source = st.text_input("来源说明", placeholder="例如包装标签、已核对价目表", help='帮助之后的审核人追溯这项说法从哪里来。')
-                effective = st.text_input("适用日期（可留空）", placeholder="YYYY-MM-DD")
-                reason = st.text_input("补录原因")
-                if st.form_submit_button("保存为待确认候选", type="primary"):
-                    ok, _ = action(lambda: add_manual(repo, product_id, field, raw, context, source, reason, operator, effective), "候选已保存，请到数据核对页确认。")
-                    if ok:
-                        st.rerun()
-    with tabs[3]:
-        st.subheader('查看资料来自哪里')
-        sources = queries.sources(repo)
-        if sources:
-            st.dataframe(sources, hide_index=True, width="stretch")
-            source_id = st.selectbox("查看批次", [s["id"] for s in sources], format_func=lambda i: f"批次 {i}")
-            observations = queries.source_observations(repo, source_id)
-            from views.components import state_table
-            status_filter = st.selectbox('来源记录状态', ['全部']+list(dict.fromkeys(r['state'] for r in observations)),
-                                         format_func=lambda v:STATES.get(v,v))
-            filtered = [r for r in observations if status_filter=='全部' or r['state']==status_filter]
-            with st.expander(f'记录明细 · {len(filtered)} 条', expanded=False):
-                state_table(filtered)
-            source = queries.source_record(repo, source_id)
-            from pathlib import Path
-            path = Path(source["stored_path"])
-            if not path.is_absolute():
-                path = repo.settings.runtime_dir / path
-            if path.is_file():
-                from views.access_view import download_guard
-                guard = download_guard()
-                def read_source():
-                    guard()
-                    return path.read_bytes()
-                st.download_button("下载本批原始资料", read_source, f"source-{source_id}.csv", "text/csv")
-            import re
-            snapshots = {match[1] for row in observations
-                         if (match := re.fullmatch(r'https://world\.openfoodfacts\.org/product/[0-9]{8,14}#snapshot=([a-f0-9]{64})', row['source_locator']))}
-            for digest in sorted(snapshots):
-                snapshot_path = repo.settings.runtime_dir / 'sources' / f'off-{digest}.json'
-                if snapshot_path.is_file():
-                    from views.access_view import download_guard
-                    snapshot_guard = download_guard()
-                    def read_snapshot(path=snapshot_path, expected=digest, guard=snapshot_guard):
-                        import hashlib
-                        from repository import BusinessError
-                        guard()
-                        payload = path.read_bytes()
-                        if hashlib.sha256(payload).hexdigest() != expected:
-                            raise BusinessError('来源快照校验失败。')
-                        return payload
-                    st.download_button('下载食品来源JSON快照', read_snapshot,
-                                       f'OpenFoodFacts-{digest[:12]}.json', 'application/json', key=f'off-snapshot:{digest}')
-            errors = [r for r in observations if r["state"] == "error"]
-            if errors:
-                buffer = io.StringIO(newline="")
-                writer = csv.DictWriter(buffer, ["row_no", "field", "raw", "error"])
-                writer.writeheader()
-                writer.writerows({k: r[k] for k in writer.fieldnames} for r in errors)
-                from views.access_view import download_guard
-                error_guard = download_guard()
-                payload = buffer.getvalue().encode('utf-8-sig')
-                def read_errors():
-                    error_guard()
-                    return payload
-                st.download_button("下载错误行清单", read_errors, f"errors-{source_id}.csv", "text/csv")
+                        if ok:
+                            st.session_state['pending_navigation'] = '数据核对'
+                            st.rerun()
+            with st.expander('单项补录 / 其他渠道 / 适用日期', expanded=False):
+                render_single_manual(repo, product_id, operator)
         else:
-            st.info("尚无导入记录。可先导入拟制演示样例。")
+            st.info('点击侧栏“＋ 新建商品”，先录入商品名称、净含量和来源。')
+    with tabs[3]:
+        render_sources(repo)
     with tabs[0]:
         from views.food_facts_view import render as render_food_facts
         render_food_facts(repo)
     if product_id:
-        st.subheader('② 检查结果并进入核对')
         next_button('下一步：去核对并确认资料', '数据核对', 'product:quality')
+        with st.expander('当前产品的完成情况', expanded=False):
+            from services.experience_service import overview
+            from views.guidance import product_overview
+            product_overview(overview(repo, product_id))
         with st.expander('当前已确认资料（生成使用这些信息）', expanded=False):
             fact_table(repo, product_id)
+
+
+def render_single_manual(repo, product_id, operator):
+    # A form batches changes; keep the controlling field outside so channels update immediately.
+    field = st.selectbox("字段", list(FIELDS), format_func=FIELDS.get, key='manual_field', help='选择你要补充的一项产品信息，每次保存一项。')
+    with st.form(f'manual_observation:{product_id}:{field}'):
+        raw = st.text_area("来源原文", placeholder='例如：200g、12.00，或包装上的配料说明', help="重量可填200g或0.2kg；金额填写元，例如12.00。")
+        if field == 'price_cent':
+            scope = st.selectbox('价格渠道', ['retail', 'wholesale'], format_func=display_context)
+            custom_scope = st.text_input('其他价格渠道（可留空）', help='例如门店A。')
+            context = custom_scope.strip() or scope
+        else:
+            context = 'general'
+        st.markdown('**2 · 标明来源与补录原因**')
+        source = st.text_input("来源说明", placeholder="例如包装标签、已核对价目表", help='帮助之后的审核人追溯这项说法从哪里来。')
+        effective = st.text_input("适用日期（可留空）", placeholder="YYYY-MM-DD")
+        reason = st.text_input("补录原因")
+        if st.form_submit_button("保存为待确认候选", type="primary"):
+            ok, _ = action(lambda: add_manual(repo, product_id, field, raw, context, source, reason, operator, effective), "候选已保存，请到数据核对页确认。")
+            if ok:
+                st.rerun()
+
+
+def render_sources(repo):
+    st.subheader('查看资料来自哪里')
+    sources = queries.sources(repo)
+    if sources:
+        st.dataframe(sources, hide_index=True, width="stretch")
+        source_id = st.selectbox("查看批次", [s["id"] for s in sources], format_func=lambda i: f"批次 {i}")
+        observations = queries.source_observations(repo, source_id)
+        from views.components import state_table
+        status_filter = st.selectbox('来源记录状态', ['全部']+list(dict.fromkeys(r['state'] for r in observations)),
+                                     format_func=lambda v:STATES.get(v,v))
+        filtered = [r for r in observations if status_filter=='全部' or r['state']==status_filter]
+        with st.expander(f'记录明细 · {len(filtered)} 条', expanded=False):
+            state_table(filtered)
+        source = queries.source_record(repo, source_id)
+        from pathlib import Path
+        path = Path(source["stored_path"])
+        if not path.is_absolute():
+            path = repo.settings.runtime_dir / path
+        if path.is_file():
+            from views.access_view import download_guard
+            guard = download_guard()
+            def read_source():
+                guard()
+                return path.read_bytes()
+            st.download_button("下载本批原始资料", read_source, f"source-{source_id}.csv", "text/csv")
+        import re
+        snapshots = {match[1] for row in observations
+                     if (match := re.fullmatch(r'https://world\.openfoodfacts\.org/product/[0-9]{8,14}#snapshot=([a-f0-9]{64})', row['source_locator']))}
+        for digest in sorted(snapshots):
+            snapshot_path = repo.settings.runtime_dir / 'sources' / f'off-{digest}.json'
+            if snapshot_path.is_file():
+                from views.access_view import download_guard
+                snapshot_guard = download_guard()
+                def read_snapshot(path=snapshot_path, expected=digest, guard=snapshot_guard):
+                    import hashlib
+                    from repository import BusinessError
+                    guard()
+                    payload = path.read_bytes()
+                    if hashlib.sha256(payload).hexdigest() != expected:
+                        raise BusinessError('来源快照校验失败。')
+                    return payload
+                st.download_button('下载食品来源JSON快照', read_snapshot,
+                                   f'OpenFoodFacts-{digest[:12]}.json', 'application/json', key=f'off-snapshot:{digest}')
+        errors = [r for r in observations if r["state"] == "error"]
+        if errors:
+            buffer = io.StringIO(newline="")
+            writer = csv.DictWriter(buffer, ["row_no", "field", "raw", "error"])
+            writer.writeheader()
+            writer.writerows({k: r[k] for k in writer.fieldnames} for r in errors)
+            from views.access_view import download_guard
+            error_guard = download_guard()
+            payload = buffer.getvalue().encode('utf-8-sig')
+            def read_errors():
+                error_guard()
+                return payload
+            st.download_button("下载错误行清单", read_errors, f"errors-{source_id}.csv", "text/csv")
+    else:
+        st.info("尚无导入记录。可先导入拟制演示样例。")
 
 
 def action_preview(data, encoding):
@@ -223,7 +244,7 @@ def render_new_product(repo):
 def render_focused_manual(repo, product_id, operator, field):
     st.subheader('补录' + FIELDS.get(field, field))
     st.caption('保存后返回同一商品的数据核对页。')
-    with st.form('focused_manual_entry'):
+    with st.form(f'focused_manual_entry:{product_id}:{field}'):
         raw = st.text_area('来源原文')
         context = st.selectbox('价格渠道', ['retail','wholesale'], format_func=display_context) if field=='price_cent' else 'general'
         source = st.text_input('来源说明', placeholder='例如：产品包装标签')

@@ -9,7 +9,7 @@ from views.components import empty_state, status_badge, state_table
 
 
 def render(repo, product_id, operator):
-    st.write('这里的任务是：对照包装或可靠来源，决定每一项资料要不要采用。导入成功不等于已经确认。')
+    st.caption('对照来源选择候选，在右侧填写处理依据并保存。导入成功不等于已经确认。')
     work_tab, history_tab, help_tab = st.tabs(['① 待处理资料','② 确认结果与记录','操作说明'])
     with help_tab:
         from views.tutorial_view import flow_diagram
@@ -55,8 +55,9 @@ def render_work(repo, product_id, operator):
                            '状态': '尚未到期' if r['availability']=='future' else '已到期，待人工确认', '来源': r['source_label']} for r in dated],
                          hide_index=True, width='stretch')
     counts = [sum(i["type"] == kind for i in issues) for kind in ("missing", "conflict", "pending")]
-    for col, label, count in zip(st.columns(3), ("还需确认的必需资料", "有不同值的字段", "等待你核对的字段组"), counts):
-        col.metric(label, count)
+    with st.container(key='workspace-metrics'):
+        for col, label, count in zip(st.columns(3), ("必需资料待确认", "冲突字段", "待核对字段组"), counts):
+            col.metric(label, count)
     confirmed_fields = {r['field'] for r in queries.current_facts(repo, product_id) if r['context']=='general'}
     done = sum(f in confirmed_fields for f in ('product_name','net_weight_g'))
     st.progress(done/2, text=f'生成必需资料：名称、净含量已确认 {done}/2 项')
@@ -81,7 +82,10 @@ def render_work(repo, product_id, operator):
                           on_click=open_missing)
     groups = [i for i in issues if "observations" in i]
     if not groups:
-        st.success("当前没有待处理候选。")
+        if counts[0]:
+            st.info("当前没有待处理候选，请先补录缺少的必需资料。")
+        else:
+            st.success("当前没有待处理候选。")
     else:
         view_filter = st.radio('核对范围', ['全部待核对','只看冲突','只看名称与净含量'], horizontal=True)
         if view_filter == '只看冲突':
@@ -102,64 +106,68 @@ def render_work(repo, product_id, operator):
         current_id = issue["current"]["id"] if issue["current"] else None
         seen_key = "seen:" + key
         seen = st.session_state.get(seen_key, current_id)
-        with st.expander(f"{'⚠' if issue['type'] == 'conflict' else '○'} {FIELDS[field]} · {display_context(scope)} · {issue['message']}", expanded=True):
-            st.markdown('**第1步 · 对照来源，选择要处理的资料**')
-            if issue['type']=='conflict':
-                st.warning('这些来源的标准值不同。先查实物或可靠依据，排除错误项后再确认正确项。')
-            else:
-                st.info('这些候选没有不同标准值，也仍需你核对来源后确认。')
-            if issue["current"]:
-                st.caption(f"当前确认：{display_value(field, issue['current']['value'])} · 修订 #{current_id}")
-            order = st.selectbox('候选排序', ['来源行顺序','原文排序'], key='order:'+key)
-            records = sorted(issue['observations'], key=lambda r:r['raw'] if order=='原文排序' else r['id'])
-            def choose_candidate(oid, decision):
-                st.session_state['choice:'+key] = oid
-                st.session_state['decision:'+key] = decision
-            for record in records:
-                with st.container(border=True):
-                    status_badge(record['state'])
-                    st.write(f"**{record['raw']}** → {display_value(field,record['normalized'])}")
-                    st.caption(f"{record['source_label']} · 来源行 {record['row_no']} · 适用日期 {record['effective_from'] or '未指定'}")
-                    with st.expander(f"查看该项来源 · #{record['id']}"):
-                        st.write(record['source_locator'])
-                    left,right = st.columns(2)
-                    left.button('选此项确认', key=f"adopt-card:{record['id']}", on_click=choose_candidate, args=(record['id'],'确认采用'))
-                    right.button('选此项排除', key=f"exclude-card:{record['id']}", on_click=choose_candidate, args=(record['id'],'排除误录'))
-            st.caption('先在卡片选择资料，再填写下方处理依据并保存。候选尚未成为确认资料。')
-            st.markdown('**第2步 · 确认处理方式，填写核对依据**')
-            decision = st.radio("处理方式", ["确认采用", "排除误录", "重新分配对象"], horizontal=True, key="decision:" + key)
-            evidence = {r['id']: r for r in issue['observations']}
-            chosen = st.session_state.get('choice:'+key)
-            if chosen not in evidence:
-                chosen = None
-            if chosen:
-                st.info(f"当前选择：{evidence[chosen]['raw']} · {evidence[chosen]['source_label']} · 尚未保存")
-            else:
-                st.warning('请先在上方卡片选择一条资料。')
-            with st.form("resolve:" + key):
-                target = product_id
-                if decision == '重新分配对象':
-                    products = queries.products(repo)
-                    target = st.selectbox("重新分配的目标产品", [p["id"] for p in products],
-                        format_func=lambda i: next(f"{p['sku']} · {p['version']}" for p in products if p["id"] == i), key="target:" + key)
-                reason = st.text_input("核对依据 / 处理原因", key="reason:" + key, placeholder="说明查阅了什么依据、为什么采纳或排除")
-                st.caption('依据示例：“已查看包装标签为200g”；“查明此条250g为误录”。请填写本次实际核查结果。')
-                acknowledged = st.checkbox('确认排除此项；来源和处理历史仍保留', key='exclude_ack:'+key) if decision=='排除误录' else True
-                submitted = st.form_submit_button("保存本次处理", type="primary", disabled=chosen is None)
-                if submitted:
-                    if not acknowledged:
-                        st.session_state['notice'] = ('warning','请先勾选排除确认；资料尚未修改。')
-                        st.rerun()
-                    if decision == "确认采用":
-                        callback = lambda: confirm_fact(repo, product_id, chosen, seen, operator, reason)
-                    elif decision == "排除误录":
-                        callback = lambda: exclude_observation(repo, chosen, operator, reason)
-                    else:
-                        callback = lambda: reassign_observation(repo, chosen, target, operator, reason)
-                    ok, _ = action(callback)
-                    if ok:
-                        st.session_state.pop(seen_key, None)
-                        st.rerun()
+        st.markdown(f"{'⚠' if issue['type'] == 'conflict' else '○'} {FIELDS[field]} · {display_context(scope)} · {issue['message']}")
+        with st.container(border=True):
+            evidence_col, decision_col = st.columns([3, 2], gap="large")
+            with evidence_col:
+                st.markdown('**第1步 · 对照来源，选择要处理的资料**')
+                if issue['type']=='conflict':
+                    st.warning('这些来源的标准值不同。先查实物或可靠依据，排除错误项后再确认正确项。')
+                else:
+                    st.info('这些候选没有不同标准值，也仍需你核对来源后确认。')
+                if issue["current"]:
+                    st.caption(f"当前确认：{display_value(field, issue['current']['value'])} · 修订 #{current_id}")
+                order = st.selectbox('候选排序', ['来源行顺序','原文排序'], key='order:'+key)
+                records = sorted(issue['observations'], key=lambda r:r['raw'] if order=='原文排序' else r['id'])
+                def choose_candidate(oid, decision):
+                    st.session_state['choice:'+key] = oid
+                    st.session_state['decision:'+key] = decision
+                for record in records:
+                    with st.container(border=True):
+                        status_badge(record['state'])
+                        st.write(f"**{record['raw']}** → {display_value(field,record['normalized'])}")
+                        st.caption(f"{record['source_label']} · 来源行 {record['row_no']} · 适用日期 {record['effective_from'] or '未指定'}")
+                        with st.expander(f"查看该项来源 · #{record['id']}"):
+                            st.write(record['source_locator'])
+                        left,right = st.columns(2)
+                        left.button('选此项确认', key=f"adopt-card:{record['id']}", on_click=choose_candidate, args=(record['id'],'确认采用'))
+                        right.button('选此项排除', key=f"exclude-card:{record['id']}", on_click=choose_candidate, args=(record['id'],'排除误录'))
+            with decision_col:
+                st.caption('先在卡片选择资料，再填写下方处理依据并保存。候选尚未成为确认资料。')
+                st.markdown('**第2步 · 确认处理方式，填写核对依据**')
+                decision = st.radio("处理方式", ["确认采用", "排除误录", "重新分配对象"], horizontal=True, key="decision:" + key)
+                evidence = {r['id']: r for r in issue['observations']}
+                chosen = st.session_state.get('choice:'+key)
+                if chosen not in evidence:
+                    chosen = None
+                if chosen:
+                    st.info(f"当前选择：{evidence[chosen]['raw']} · {evidence[chosen]['source_label']} · 尚未保存")
+                else:
+                    st.warning('请先在上方卡片选择一条资料。')
+                with st.form("resolve:" + key):
+                    target = product_id
+                    if decision == '重新分配对象':
+                        products = queries.products(repo)
+                        target = st.selectbox("重新分配的目标产品", [p["id"] for p in products],
+                            format_func=lambda i: next(f"{p['sku']} · {p['version']}" for p in products if p["id"] == i), key="target:" + key)
+                    reason = st.text_input("核对依据 / 处理原因", key="reason:" + key, placeholder="说明查阅了什么依据、为什么采纳或排除")
+                    st.caption('依据示例：“已查看包装标签为200g”；“查明此条250g为误录”。请填写本次实际核查结果。')
+                    acknowledged = st.checkbox('确认排除此项；来源和处理历史仍保留', key='exclude_ack:'+key) if decision=='排除误录' else True
+                    submitted = st.form_submit_button("保存本次处理", type="primary", disabled=chosen is None)
+                    if submitted:
+                        if not acknowledged:
+                            st.session_state['notice'] = ('warning','请先勾选排除确认；资料尚未修改。')
+                            st.rerun()
+                        if decision == "确认采用":
+                            callback = lambda: confirm_fact(repo, product_id, chosen, seen, operator, reason)
+                        elif decision == "排除误录":
+                            callback = lambda: exclude_observation(repo, chosen, operator, reason)
+                        else:
+                            callback = lambda: reassign_observation(repo, chosen, target, operator, reason)
+                        ok, _ = action(callback)
+                        if ok:
+                            st.session_state.pop(seen_key, None)
+                            st.rerun()
         st.session_state[seen_key] = current_id
     if not counts[0] and not counts[1]:
         st.success('名称和净含量已确认。生成含价格的内容前，还需确认对应渠道价格。')
