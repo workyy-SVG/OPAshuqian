@@ -3,7 +3,9 @@ import streamlit as st
 import requests
 from io import BytesIO
 from PIL import Image, ImageOps, UnidentifiedImageError
-from config import FIELDS
+from datetime import datetime
+from zoneinfo import ZoneInfo
+from config import FIELDS, Settings
 from repository import BusinessError
 from services.food_facts_service import lookup, browse, CATEGORIES, candidate_preview, import_product, ATTRIBUTION
 from services.food_facts_service import product_image_url, USER_AGENT
@@ -58,9 +60,8 @@ def cached_lookup(query, kind):
     return lookup(query, kind)
 
 
-@st.cache_data(ttl=3600, max_entries=128, show_spinner=False)
 def cached_catalog(category, subcategory, page):
-    return browse(category, subcategory, page)
+    return browse(category, subcategory, page, cache_dir=Settings.from_env().runtime_dir / 'food-catalog-cache')
 
 
 def product_label(product):
@@ -100,6 +101,8 @@ def catalog(prefix='catalog', show_cards=True):
     left, right = st.columns(2)
     category = left.selectbox('商品大类', list(CATEGORIES), key=prefix + '_category')
     subcategory = right.selectbox('细分类', list(CATEGORIES[category]), key=prefix + '_subcategory:' + category)
+    if category == '水饮':
+        st.caption('建议先选饮用水、果汁或茶饮料等细分类；“饮料与饮用水”覆盖全库，加载可能较慢。')
     identity = (category, subcategory)
     if st.session_state.get(prefix + '_identity') != identity:
         st.session_state[prefix + '_identity'] = identity
@@ -122,7 +125,12 @@ def catalog(prefix='catalog', show_cards=True):
     page = result['page']
     total = result['total']
     st.caption(f"{category} / {subcategory} · 第{page}页 · " +
-               (f'数据源报告约{total}条' if total is not None else '总数由数据源提供') + '；每页最多12项')
+               (f'数据源报告约{total}条' if total is not None else '为加快加载，不统计全库总数') + '；每页最多12项')
+    if result.get('saved_at'):
+        saved = datetime.fromtimestamp(result['saved_at'], ZoneInfo('Asia/Shanghai')).strftime('%Y-%m-%d %H:%M:%S')
+        if result.get('stale'):
+            st.warning('上游暂时不可用，正在展示同一分类、同一页最近成功获取的真实缓存。')
+        st.caption(f'资料获取时间：{saved}（北京时间）' + (' · 缓存资料，请按实物复核' if result.get('cached') else ' · 本次接口返回'))
     products = result['products']
     if products:
         selected = st.selectbox('从本页商品列表选择', range(len(products)), index=None,
