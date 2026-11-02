@@ -13,6 +13,7 @@ from services.food_facts_service import product_image_urls, USER_AGENT
 from services.product_illustration_service import illustration_kind, ILLUSTRATIONS
 from services.food_display_service import name_display, quantity_display, source_quantity
 from services.local_food_catalog import categories as local_categories, search_foods
+from services.chinese_food_source import search_food as search_chinese_food
 from html import escape
 from views.common import action
 
@@ -81,6 +82,11 @@ def cached_lookup(query, kind):
 
 def cached_catalog(category, subcategory, page):
     return browse(category, subcategory, page, cache_dir=Settings.from_env().runtime_dir / 'food-catalog-cache')
+
+
+@st.cache_data(ttl=86400, max_entries=128, show_spinner=False)
+def cached_chinese_food(name):
+    return search_chinese_food(name)
 
 
 def product_label(product):
@@ -327,4 +333,29 @@ def local_catalog():
             st.write('**' + food['name'] + '**')
             st.caption(food['region'] + ' · ' + food['kind'])
             st.write(food['note'])
+            if st.button('查看在线中文资料', key='local_food:' + food['name']):
+                st.session_state['local_food_selected'] = food
             st.caption('下一步：取得真实包装后，通过“手动补录”或CSV录入名称、规格、配料和价格。')
+    selected = st.session_state.get('local_food_selected')
+    if selected and selected in foods:
+        st.divider()
+        st.subheader(selected['name'] + ' · 在线中文资料')
+        st.caption('免费接口：中文维基百科。以下是百科检索结果，仅用于了解食品，不作为包装、配料或功效依据。')
+        try:
+            with st.spinner('正在查询中文公开资料…'):
+                results = cached_chinese_food(selected['name'])
+        except BusinessError as exc:
+            st.warning(str(exc))
+            results = []
+        if not results:
+            st.info('暂未找到匹配的中文百科页面。仍可按真实包装使用手动补录或CSV。')
+        for result in results:
+            with st.container(border=True):
+                info, picture = st.columns([3, 1])
+                with info:
+                    st.write('**' + result['title'] + '**')
+                    st.write(result['extract'] or '该页面暂未提供可显示的简介。')
+                    st.link_button('打开中文百科来源 ↗', result['url'])
+                if result['image']:
+                    with picture:
+                        st.image(result['image'], width='stretch')
