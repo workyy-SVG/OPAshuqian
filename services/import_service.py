@@ -4,17 +4,20 @@ import io
 import json
 import re
 import uuid
+from typing import Any
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from config import BRAND_CODE, FIELDS, MAX_UPLOAD_BYTES
+from config import BRAND_CODE, FIELDS, MAX_UPLOAD_BYTES, MAX_IMPORT_ROWS
 from repository import BusinessError, now
+from services.unit_service import normalize_weight
+from repository import Repository
 
 COLUMNS = ["sku", "product_version", "field_key", "raw_value", "context_key",
            "source_label", "source_locator", "effective_from"]
 
 
-def normalize_value(field, raw):
+def normalize_value(field: str, raw: str) -> str:
     value = raw.strip()
     if not value:
         raise BusinessError("值不能为空。")
@@ -23,13 +26,10 @@ def normalize_value(field, raw):
     if field not in FIELDS:
         raise BusinessError("无法识别的字段名。")
     if field == "net_weight_g":
-        match = re.fullmatch(r"(\d+(?:\.\d+)?)\s*(kg|g|千克|公斤|克)?", value, re.I)
-        if not match:
-            raise BusinessError("净含量请填写正数及 g 或 kg 单位。")
-        result = Decimal(match[1]) * (1000 if (match[2] or "g").lower() in ("kg", "千克", "公斤") else 1)
-        if result <= 0 or result > 1000000000:
-            raise BusinessError("净含量必须大于 0，且在合理范围内。")
-        return format(result.normalize(), "f")
+        try:
+            return normalize_weight(value)
+        except ValueError as exc:
+            raise BusinessError(str(exc)) from exc
     if field == "price_cent":
         match = re.fullmatch(r"(?:¥|￥)?\s*(\d+(?:\.\d{1,2})?)\s*元?", value)
         if not match:
@@ -41,7 +41,7 @@ def normalize_value(field, raw):
     return " ".join(value.split())
 
 
-def normalize_rows(rows):
+def normalize_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     results = []
     for row in rows:
         item = dict(row)
@@ -82,18 +82,14 @@ def normalize_rows(rows):
     return results
 
 
-def preview_import(file_bytes, encoding="utf-8-sig"):
+def preview_import(file_bytes: bytes, encoding: str = "utf-8-sig") -> dict[str, Any]:
     if len(file_bytes) > MAX_UPLOAD_BYTES:
         raise BusinessError("文件超过 5MB 上限。", "file_size")
     if encoding not in ("utf-8-sig", "gb18030"):
         raise BusinessError("不支持的编码。")
     try:
-        text = file_bytes.decode(encoding)
-    except UnicodeDecodeError as exc:
-        raise BusinessError("无法按所选编码读取。请明确选择 GB18030 后重新预览。", "encoding") from exc
-    csv.field_size_limit(MAX_UPLOAD_BYTES)
-    try:
-        reader = csv.DictReader(io.StringIO(text, newline=""), strict=True)
+        stream = io.TextIOWrapper(io.BytesIO(file_bytes), encoding=encoding, newline='')
+        reader = csv.DictReader(stream, strict=True)
         headers = reader.fieldnames or []
         errors = []
         missing = set(COLUMNS) - set(headers)
@@ -101,9 +97,11 @@ def preview_import(file_bytes, encoding="utf-8-sig"):
             errors.append("缺少列：" + "、".join(sorted(missing)))
         if len(set(headers)) != len(headers):
             errors.append("表头存在重复列")
-        rows = []
+        rows: list[dict[str, Any]] = []
         if not errors:
             for row in reader:
+                if len(rows) >= MAX_IMPORT_ROWS:
+                    raise BusinessError(f'文件超过{MAX_IMPORT_ROWS}条记录，请分批导入。', 'row_limit')
                 if None in row:
                     errors.append(f"第 {reader.line_num} 行的列数超过表头")
                     continue
@@ -111,14 +109,19 @@ def preview_import(file_bytes, encoding="utf-8-sig"):
                 rows.append(row)
             if not rows:
                 errors.append("CSV 没有数据行")
+    except UnicodeDecodeError as exc:
+        raise BusinessError("无法按所选编码读取。请明确选择 GB18030 后重新预览。", "encoding") from exc
     except csv.Error as exc:
         raise BusinessError("CSV 格式错误，请检查引号、分隔符或超长字段。", "csv_format") from exc
+    finally:
+        if 'stream' in locals():
+            stream.close()
     return {"sha256": hashlib.sha256(file_bytes).hexdigest(), "file_bytes": file_bytes,
             "encoding": encoding, "headers": headers, "errors": errors,
             "rows": normalize_rows(rows) if not errors else []}
 
 
-def commit_import(repo, preview, original_name="资料.csv"):
+def commit_import(repo: Repository, preview: dict[str, Any], original_name: str = "资料.csv") -> dict[str, Any]:
     # Re-parse original bytes rather than trusting editable preview objects.
     checked = preview_import(preview["file_bytes"], preview["encoding"])
     if checked["errors"]:
@@ -159,7 +162,7 @@ def _counts(db, source_id):
             "duplicates": counts.get("duplicate", 0), "errors": counts.get("error", 0), "pending": counts.get("pending", 0)}
 
 
-def add_manual(repo, product_id, field, raw, context, source_label, reason, operator, effective_from=""):
+def add_manual(repo: Repository, product_id: int, field: str, raw: str, context: str, source_label: str, reason: str, operator: str, effective_from: str = "") -> int:
     product = repo.one("SELECT * FROM product_versions WHERE id=?", (product_id,))
     if not product:
         raise BusinessError("产品不存在。")

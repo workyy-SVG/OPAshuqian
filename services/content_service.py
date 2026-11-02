@@ -5,6 +5,8 @@ from decimal import Decimal
 from repository import BusinessError, now
 from services.fact_service import _snapshot, canonical, current_basis, snapshot_hash
 from services.llm_client import PROMPT_VERSION, ModelError, validate_result
+from services.text_check_service import assert_text_matches
+from services.audit_service import audited, model_audit_scope
 from services.quota_service import reserve_request
 
 
@@ -13,7 +15,8 @@ def template_result(snapshot):
     name = values["product_name"]
     pieces = [f"{name}，净含量 {values['net_weight_g']} 克。"]
     if "price_cent" in values:
-        pieces.append(f"{snapshot['context']} 渠道价格 {Decimal(values['price_cent']) / 100:.2f} 元。")
+        channel = {'retail': '零售', 'wholesale': '批发'}.get(snapshot['context'], snapshot['context'])
+        pieces.append(f"{channel}价格 {Decimal(values['price_cent']) / 100:.2f} 元。")
     for field, label in (("ingredients_text", "配料"), ("usage_text", "使用方法"), ("storage_text", "储存说明")):
         if field in values:
             pieces.append(f"{label}：{values[field]}。")
@@ -77,8 +80,14 @@ def save_draft(repo, job_id, result, mode, attempts=0, usage=None, logical_id=No
         return content_id
 
 
+@audited('content.generate')
 def generate_content(repo, product_id, request_key, context="retail", content_type="product_intro", include_price=True,
-                     mode="template", client=None, selected_fields=None, logical_id=None):
+                     mode="template", client=None, selected_fields=None, logical_id=None, quota_repo=None, session_id=None):
+    from services.demo_service import live_models_enabled, public_demo
+    if mode != 'template' and not live_models_enabled():
+        raise BusinessError('管理员已关闭真实模型调用，请使用模板模式。', 'live_models_disabled')
+    if mode != 'template' and public_demo() and (not session_id or quota_repo is None):
+        raise BusinessError('公开演示缺少会话额度配置。', 'missing_session_quota')
     created = create_generation(repo, product_id, request_key, context, content_type, include_price, mode,
                                 client.config.name if client else "template", selected_fields)
     job = created["job"]
@@ -90,9 +99,10 @@ def generate_content(repo, product_id, request_key, context="retail", content_ty
         if mode == "template":
             output = {"result": template_result(snapshot), "attempts": 0, "usage": {}}
         elif client:
-            # Count every actual outbound request, including a transient retry.
-            client.before_request = lambda: reserve_request(repo, mode)
-            output = client.generate_json(snapshot, PROMPT_VERSION)
+            # Count every real outbound request, including transient retries.
+            client.before_request = lambda: reserve_request(quota_repo if quota_repo is not None else repo, mode, session_id=session_id)
+            with model_audit_scope(repo.settings.runtime_dir, job['id']):
+                output = client.generate_json(snapshot, PROMPT_VERSION)
         else:
             raise ModelError("请先配置模型。", "missing_api_key", 0)
         content_id = save_draft(repo, job["id"], output["result"], mode, output["attempts"], output["usage"], logical_id)
@@ -117,6 +127,7 @@ def _assert_current(db, row):
     current = current_basis(db, json.loads(row["snapshot_json"]))
     if current["missing"] or current["snapshot_hash"] != row["snapshot_hash"]:
         raise BusinessError("依据已变化或存在冲突，请生成新修订并重新审核。", "stale_basis")
+    assert_text_matches(row["title"], row["body"], current["snapshot"])
 
 
 def edit_content(repo, content_id, title, body, operator, reason, rebind=False):
@@ -132,6 +143,7 @@ def edit_content(repo, content_id, title, body, operator, reason, rebind=False):
             if basis["missing"]:
                 raise BusinessError("当前依据不完整或存在冲突，不能重绑。")
             snapshot = basis["snapshot"]
+            assert_text_matches(title, body, snapshot)
         basis = current_basis(db, snapshot)
         state = "stale" if basis["missing"] or basis["snapshot_hash"] != snapshot_hash(snapshot) else "draft"
         new_id = _insert_content(db, snapshot, {"title": title, "body": body}, state, "manual", logical_id=old["logical_id"], reason=reason.strip())
@@ -153,6 +165,7 @@ def submit_for_review(repo, content_id, operator):
                    (content_id, operator.strip(), "submitted", row["snapshot_hash"], "提交人工逐句核对", now()))
 
 
+@audited('content.approve')
 def approve_content(repo, content_id, operator, basis_hash, reason):
     if not operator.strip() or not reason.strip():
         raise BusinessError("请填写审核人和审核说明。")
@@ -168,6 +181,7 @@ def approve_content(repo, content_id, operator, basis_hash, reason):
                    (content_id, operator.strip(), "approved", basis_hash, reason.strip(), now()))
 
 
+@audited('content.export')
 def export_content(repo, content_id, operator):
     if not operator.strip():
         raise BusinessError("请填写导出操作人。")

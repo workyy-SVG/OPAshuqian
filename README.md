@@ -1,14 +1,29 @@
 # 黔品智营
 
-面向地方特色食品小微品牌的产品资料核对与内容协同工具。按实施手册实现 Python 3.13、Streamlit、SQLite 本地单体应用，支持 DeepSeek 及无需密钥的模板模式。
+报告问题的修复、公开演示开关、验收结果及未完成事项见[测试报告整改说明](docs/REPORT_REMEDIATION.md)。
 
-**当前状态：本地首版已实现，30 项自动化测试通过，Windows / Linux CI 与运行包独立环境复现通过，拟制资料闭环和备份恢复已验证。真实 DeepSeek 调用尚未验证，需要在本机配置自己的 API Key。**
+分类商品点击预览与无需输入条码的选择方式见[商品选择修复](docs/CATALOG_SELECTION_FIX.md)；本轮115项测试通过。
 
-## 四个工作页面
+面向地方特色食品小微品牌的产品资料核对与内容协同工具。按实施手册实现 Python 3.13、Streamlit、SQLite 本地单体应用，支持DeepSeek、通义千问及无需密钥的模板模式。
+
+**当前状态：使用教程改为四模块操作流程图与30步逐项说明，移除分幕演示、练习控件和弹出体验向导。工作区按准备资料、核对确认、生成审核、变更维护排序，待办操作优先显示。105项本地测试通过，核心覆盖率92.96%，静态检查22个源文件通过。分类目录此前实测上游HTTP 503，实时列表可用性仍需验收；真实模型调用和真人可用性指标也需单独验收。**
+
+新版入口与边界见[教程、分类目录与布局说明](docs/TUTORIAL_CATALOG_THEMES.md)。目录按分类分页浏览，无需预先知道条码；仅选择并确认的商品进入工作区，不在网页请求中复制整个公开数据库。
+
+当前操作路径见[流程图教程与工作区布局说明](docs/FLOWCHART_WORKSPACE.md)。教程只读，真实业务仍需人工确认和审核；此前阶段的体验优化记录保留供追溯。
+
+学生演示从[公开食品资料五分钟流程](docs/OPEN_FOOD_FACTS.md)开始。入口为“产品资料 → 公开食品资料”，无需新增API Key；名称、重量、配料核对确认后可直接用模板完成审核导出。网络不可用时继续使用CSV拟制样例。
+
+逐项处理结果见[18项清单实施记录](docs/CHECKLIST_IMPLEMENTATION.md)，认证配置和升级恢复见[部署说明](docs/DEPLOYMENT.md)。PostgreSQL迁移与开放多品牌入驻保留为按需路线图。
+
+本轮还修复了旧价格正文可误绑新依据的问题：正文的明确名称、净含量与价格在提交审核、通过审核和导出时重新校验。详见[优化记录](docs/OPTIMIZATION.md)。先前首版的Windows/Linux CI、独立环境复现与备份恢复记录保留在验收文档中。
+
+## 教程与四个业务页面
 
 | 页面 | 可完成的工作 |
 | --- | --- |
-| 产品资料 | CSV 预览与导入、明确选择编码、错误行下载、手动补录、产品版本与来源历史 |
+| 使用教程 | 功能作用、操作步骤、完成标志、可视化练习、可下载说明 |
+| 产品资料 | 公开食品条码/名称查询、候选预览、CSV导入、错误行与来源快照下载、手动补录、版本与历史 |
 | 数据核对 | 按产品与渠道核对缺失和冲突、排除误录、重新分配、人工确认、查看处理依据 |
 | 内容工作台 | 两类内容、可选价格与说明字段、模板或 DeepSeek 生成、保存快照、编辑新修订、审核与 TXT 导出 |
 | 变更追踪 | 查看变化影响、撤回事实、模板重写或正文沿用并重绑新依据、保留历史 |
@@ -21,7 +36,7 @@ Windows PowerShell 在项目根目录依次运行：
 
 ```powershell
 py -3.13 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements-lock.txt
+.\.venv\Scripts\python.exe -m pip install --require-hashes --only-binary=:all: -r requirements-lock.txt
 .\.venv\Scripts\python.exe -m scripts.init_db
 .\.venv\Scripts\python.exe -m streamlit run app.py --server.address=127.0.0.1
 ```
@@ -33,10 +48,10 @@ py -3.13 -m venv .venv
 ```powershell
 uv python install 3.13
 uv venv --python 3.13 .venv
-uv pip install --python .venv/Scripts/python.exe -r requirements-lock.txt
+uv pip install --python .venv/Scripts/python.exe --require-hashes --only-binary :all: -r requirements-lock.txt
 ```
 
-Linux / macOS 使用 `python3.13 -m venv .venv`，后续解释器路径改为 `.venv/bin/python`。本机验证平台为 Windows；[Windows 与 Linux CI 已通过](https://github.com/workyy-SVG/OPAshuqian/actions/runs/41188485804)，macOS 尚未验证。
+Linux / macOS 使用 `python3.13 -m venv .venv`，后续解释器路径改为 `.venv/bin/python`。本机验证平台为Windows；Windows、Linux、macOS及Docker均已在此前CI中验证，最新结果见[Actions](https://github.com/workyy-SVG/OPAshuqian/actions)。
 
 ## 第一次体验
 
@@ -46,7 +61,7 @@ Linux / macOS 使用 `python3.13 -m venv .venv`，后续解释器路径改为 `.
 2. 选择 P001 V1，进入数据核对页。净含量有 200g、0.2kg 和 250g：根据本次拟制场景，先排除 250g 并说明原因，再确认 200g；0.2kg 会作为同值依据保留。
 3. 确认产品名称和 retail 价格。生成商品介绍、朋友圈文案时可加入已有的配料和储存说明。
 4. 在“审核与历史”选择草稿，提交人工审核；逐句核对后填写说明并审核通过，下载 TXT。
-5. 回产品资料页补录价格 `14.00`，字段选 `price_cent`、范围填 `retail`，说明来源与调价原因。到数据核对页确认新依据。
+5. 回产品资料页补录价格 `14.00`，字段选“价格”、范围选“零售”，说明来源与调价原因。到数据核对页确认新依据。CSV中的代码仍为price_cent和retail。
 6. 在变更追踪页看到旧内容待复查。生成模板新修订，或核对正文后重绑当前依据，重新审核导出。旧修订及原审核不会被覆盖。
 
 所有样例、脚本自动确认和价格变更均为拟制演示，不代表真实经营效果或真实用户审核。直接操作页面时，事实取舍与内容审核由经营者本人完成。
@@ -80,14 +95,16 @@ name = "qwen-plus"
 .\.venv\Scripts\python.exe -m scripts.check_model 1 --provider qwen --confirm-live
 ```
 
-401 / 402 等配置与余额错误不会自动重试；连接超时、429 和部分 5xx 最多额外重试一次。任务记录模型、提示词版本、次数、用量与脱敏错误码。崩溃遗留的运行中任务由用户核查后明确新建请求，不自动重复计费。
+401 / 402等配置与余额错误不会自动重试；默认连接超时、429和部分5xx最多额外重试一次，采用指数退避与抖动。429优先尊重Retry-After，超过最大等待则停止，不提前重试。QIANPIN_RETRY_ATTEMPTS（1至5）、QIANPIN_RETRY_BASE_DELAY与QIANPIN_RETRY_MAX_DELAY（最多30秒）可在部署环境中调整。任务记录模型、提示词版本、次数、用量与脱敏错误码。提示词由prompts中的版本文件和哈希清单管理。崩溃遗留任务由用户核查后明确重试。
 
 ## 数据、测试与备份
 
 默认数据库为 `runtime/qianpin.sqlite3`。原文件存放 `runtime/sources`，导出及审计文件存放 `runtime/exports`。原文件以哈希命名，数据库内记录相对路径，便于迁移。初始化可重复执行，不清空旧数据。`QIANPIN_RUNTIME_DIR` 和 `QIANPIN_DB_PATH` 可用于隔离演示库；默认路径按项目文件定位，不受启动目录影响。
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests -q
+.\.venv\Scripts\python.exe -m pip install --require-hashes --only-binary=:all: -r requirements-dev-lock.txt
+.\.venv\Scripts\python.exe -m mypy --config-file mypy.ini
+.\.venv\Scripts\python.exe -m pytest tests -q --cov=services --cov=repository --cov=config --cov-fail-under=80
 .\.venv\Scripts\python.exe -m scripts.backup_db
 .\.venv\Scripts\python.exe -m scripts.restore_check runtime/backups/某份备份.sqlite3 runtime/restored.sqlite3
 ```
@@ -112,7 +129,7 @@ $env:QIANPIN_RUNTIME_DIR = "$PWD/runtime/my-demo"
 
 生成 `outputs/qianpin-*.zip`。白名单包含代码、依赖锁、样例、测试和说明，不含真实密钥、运行数据库或 `.venv`。解压后按上述安装命令复现。
 
-已提供可选 Dockerfile 与 Compose 配置；当前未进行 Docker 构建或线上部署验证。Compose 仅暴露本机回环端口，并持久挂载 runtime。对外试用时应另行配置 HTTPS 和身份验证；单体首版仅运行一个应用实例。
+Docker构建与容器冒烟已由GitHub验证。Compose仅暴露宿主机回环端口并挂载runtime，同时启用登录保护，需先按部署说明配置账号。非回环监听自动要求登录；本机127.0.0.1体验保持可用。实际对外试用仍须配置HTTPS与域名，首版仅运行一个应用实例。
 
 ## 范围和验证记录
 
