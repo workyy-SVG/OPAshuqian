@@ -317,6 +317,16 @@ def render(repo):
 
 
 def local_catalog():
+    selected_name = st.session_state.get('local_food_selected')
+    if isinstance(selected_name, dict):
+        selected_name = selected_name.get('name')
+    if isinstance(selected_name, str):
+        selected = next((item for item in search_foods(keyword=selected_name)
+                         if item['name'] == selected_name), None)
+        if selected:
+            render_local_food_detail(selected)
+            return
+        st.session_state.pop('local_food_selected', None)
     st.markdown('**中文选品参考 · 优先收录贵州特色食品**')
     st.caption('这里不依赖国外食品接口，也不伪造条码、品牌、净含量或配料。选中方向后，请按真实包装手工补录。')
     left, right = st.columns([1, 2])
@@ -334,28 +344,36 @@ def local_catalog():
             st.caption(food['region'] + ' · ' + food['kind'])
             st.write(food['note'])
             if st.button('查看在线中文资料', key='local_food:' + food['name']):
-                st.session_state['local_food_selected'] = food
+                st.session_state['local_food_selected'] = food['name']
+                st.rerun()
             st.caption('下一步：取得真实包装后，通过“手动补录”或CSV录入名称、规格、配料和价格。')
-    selected = st.session_state.get('local_food_selected')
-    if selected and selected in foods:
-        st.divider()
-        st.subheader(selected['name'] + ' · 在线中文资料')
-        st.caption('免费接口：中文维基百科。以下是百科检索结果，仅用于了解食品，不作为包装、配料或功效依据。')
-        try:
-            with st.spinner('正在查询中文公开资料…'):
-                results = cached_chinese_food(selected['name'])
-        except BusinessError as exc:
-            st.warning(str(exc))
-            results = []
-        if not results:
-            st.info('暂未找到匹配的中文百科页面。仍可按真实包装使用手动补录或CSV。')
-        for result in results:
-            with st.container(border=True):
-                info, picture = st.columns([3, 1])
-                with info:
-                    st.write('**' + result['title'] + '**')
-                    st.write(result['extract'] or '该页面暂未提供可显示的简介。')
-                    st.link_button('打开中文百科来源 ↗', result['url'])
-                if result['image']:
-                    with picture:
-                        st.image(result['image'], width='stretch')
+
+
+def render_local_food_detail(food):
+    if st.button('← 返回食品列表', key='local_food_back'):
+        st.session_state.pop('local_food_selected', None)
+        st.rerun()
+    st.caption('贵州及中文食品 / ' + food['category'])
+    st.subheader(food['name'])
+    st.caption(food['region'] + ' · ' + food['kind'])
+    st.write(food['note'])
+    st.info('这是独立的中文资料详情页。百科内容仅用于了解食品，不作为包装、配料、规格或功效依据。')
+    try:
+        with st.spinner('正在查询中文公开资料…'):
+            results = cached_chinese_food(food['name'])
+    except BusinessError as exc:
+        st.warning(str(exc))
+        results = []
+    if not results:
+        st.info('暂未找到匹配的中文百科页面。仍可按真实包装使用手动补录或CSV。')
+        return
+    for result in results:
+        with st.container(border=True):
+            info, picture = st.columns([3, 1])
+            with info:
+                st.write('**' + result['title'] + '**')
+                st.write(result['extract'] or '该页面暂未提供可显示的简介。')
+                st.link_button('打开中文百科来源 ↗', result['url'])
+            if result['image']:
+                with picture:
+                    st.image(result['image'], width='stretch')
