@@ -1,9 +1,56 @@
 """Explicit remote discovery and immediate, isolated candidate previews."""
 import streamlit as st
+import requests
+from io import BytesIO
+from PIL import Image, ImageOps, UnidentifiedImageError
 from config import FIELDS
 from repository import BusinessError
 from services.food_facts_service import lookup, browse, CATEGORIES, candidate_preview, import_product, ATTRIBUTION
+from services.food_facts_service import product_image_url, USER_AGENT
 from views.common import action
+
+
+@st.cache_data(ttl=900, max_entries=128, show_spinner=False)
+def cached_product_photo(url):
+    """Bound downloads and normalize packaging to an uncropped white display area."""
+    try:
+        with requests.get(url, headers={'User-Agent': USER_AGENT}, timeout=(3, 5),
+                          stream=True, allow_redirects=False) as response:
+            if response.status_code != 200:
+                return None
+            content = bytearray()
+            for chunk in response.iter_content(65536):
+                content.extend(chunk)
+                if len(content) > 4 * 1024 * 1024:
+                    return None
+        with Image.open(BytesIO(content)) as original:
+            if original.width * original.height > 12_000_000:
+                return None
+            photo = ImageOps.exif_transpose(original).convert('RGBA')
+            photo.thumbnail((340, 400))
+            canvas = Image.new('RGB', (380, 440), 'white')
+            canvas.paste(photo, ((380-photo.width)//2, (440-photo.height)//2), photo)
+            output = BytesIO()
+            canvas.save(output, format='PNG')
+            return output.getvalue()
+    except (requests.RequestException, OSError, ValueError, UnidentifiedImageError, Image.DecompressionBombError):
+        return None
+
+
+def product_photo(product):
+    url = product_image_url(product)
+    photo = cached_product_photo(url) if url else None
+    if photo:
+        st.image(photo, width='stretch')
+        st.caption('商品包装图 · Open Food Facts')
+        st.link_button('查看原图 ↗', url)
+    else:
+        st.markdown('''<div style="min-height:180px;border-radius:16px;background:#f4f7f5;
+            border:1px dashed #a5bdb3;display:flex;flex-direction:column;align-items:center;
+            justify-content:center;color:#496458;padding:16px;text-align:center">
+            <span style="font-size:44px" aria-hidden="true">▧</span>
+            <strong>替代图</strong><span style="font-size:13px;margin-top:8px">
+            暂无可用实物图<br>此处为占位示意，非商品包装</span></div>''', unsafe_allow_html=True)
 
 
 @st.cache_data(ttl=3600, max_entries=256, show_spinner=False)
@@ -92,9 +139,13 @@ def catalog(prefix='catalog', show_cards=True):
         columns = st.columns(2)
         for index, product in enumerate(products):
             with columns[index % 2], st.container(border=True):
-                st.write('**' + str(product.get('product_name_zh') or product.get('product_name') or '未命名商品') + '**')
-                st.caption(f"条码 {product['code']} · {product.get('brands') or '品牌未提供'}")
-                st.write('包装：' + str(product.get('quantity') or '未提供'))
+                details, picture = st.columns([3, 2], vertical_alignment='center')
+                with details:
+                    st.write('**' + str(product.get('product_name_zh') or product.get('product_name') or '未命名商品') + '**')
+                    st.caption(f"条码 {product['code']} · {product.get('brands') or '品牌未提供'}")
+                    st.write('包装：' + str(product.get('quantity') or '未提供'))
+                with picture:
+                    product_photo(product)
                 st.button('选择此商品，查看候选预览', key=f"catalog_pick:{index}:{product['code']}",
                           on_click=select_catalog_product, args=(product,))
     prev, next_col = st.columns(2)
@@ -136,6 +187,8 @@ def search():
     if results:
         selected = st.selectbox('选择查询结果', range(len(results)), key='food_selected',
                                 format_func=lambda i: product_label(results[i]))
+        with st.columns([1, 2])[0]:
+            product_photo(results[selected])
         st.button('查看查询商品的候选预览', key='search_preview', on_click=select_catalog_product,
                   args=(results[selected], '条码 / 名称查询'))
 
@@ -144,6 +197,8 @@ def search():
 def preview_dialog(repo, product):
     st.subheader(str(product.get('product_name_zh') or product.get('product_name') or '未命名商品'))
     st.caption('来源：' + st.session_state.get('food_origin', '公开食品资料') + ' · 条码 ' + str(product['code']))
+    with st.columns([1, 2])[0]:
+        product_photo(product)
     st.info('这里只是预览，尚未导入。请核对商品身份，勾选确认后再保存为候选。')
     st.caption(f"品牌参考：{product.get('brands') or '来源未提供'} · 包装规格：{product.get('quantity') or '来源未提供'}")
     st.link_button('在 Open Food Facts 查看来源', f"https://world.openfoodfacts.org/product/{product['code']}")

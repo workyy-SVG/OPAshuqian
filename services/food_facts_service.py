@@ -6,6 +6,7 @@ import json
 import re
 import threading
 import time
+from urllib.parse import urlparse
 from collections import deque
 from typing import Any
 
@@ -18,9 +19,26 @@ from services.unit_service import normalize_weight
 BASE = 'https://world.openfoodfacts.org'
 USER_AGENT = 'QianpinZhiying/1.0 (https://github.com/workyy-SVG/OPAshuqian)'
 ATTRIBUTION = 'Open Food Facts · ODbL / Database Contents License'
-FIELDS = 'code,product_name,product_name_zh,brands,quantity,ingredients_text,ingredients_text_zh,nutriments,last_modified_t'
+FIELDS = 'code,product_name,product_name_zh,brands,quantity,ingredients_text,ingredients_text_zh,nutriments,last_modified_t,image_front_url,image_front_small_url'
 _lock = threading.Lock()
 _calls: dict[str, deque[float]] = {'barcode': deque(), 'name': deque()}
+
+
+def product_image_url(product: dict[str, Any]) -> str | None:
+    """Only use front images returned for this product from the OFF image host."""
+    for field in ('image_front_url', 'image_front_small_url'):
+        value = product.get(field)
+        if not isinstance(value, str):
+            continue
+        try:
+            parsed = urlparse(value)
+            if (parsed.scheme == 'https' and parsed.hostname == 'images.openfoodfacts.org'
+                    and not parsed.username and not parsed.password and parsed.port in (None, 443)
+                    and parsed.path.startswith('/images/products/')):
+                return value
+        except ValueError:
+            continue
+    return None
 
 
 def _reserve(kind: str) -> None:
