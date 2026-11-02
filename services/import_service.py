@@ -158,8 +158,33 @@ def commit_import(repo: Repository, preview: dict[str, Any], original_name: str 
 
 def _counts(db, source_id):
     counts = {r[0]: r[1] for r in db.execute("SELECT state,COUNT(*) FROM observations WHERE source_id=? GROUP BY state", (source_id,))}
+    products = [dict(r) for r in db.execute("""SELECT p.id,p.sku,p.version,
+        SUM(o.state IN ('pending','adopted','duplicate')) AS candidate_count
+        FROM observations o JOIN product_versions p ON p.id=o.product_id
+        WHERE o.source_id=? AND o.product_id IS NOT NULL GROUP BY p.id,p.sku,p.version ORDER BY p.sku,p.version""", (source_id,))]
     return {"candidates": counts.get("pending", 0) + counts.get("adopted", 0),
-            "duplicates": counts.get("duplicate", 0), "errors": counts.get("error", 0), "pending": counts.get("pending", 0)}
+            "duplicates": counts.get("duplicate", 0), "errors": counts.get("error", 0),
+            "pending": counts.get("pending", 0), "products": products,
+            "product_ids": [p['id'] for p in products]}
+
+
+def create_basic_product(repo: Repository, name: str, weight: str, source: str,
+                         sku: str = '', version: str = 'V1') -> dict[str, Any]:
+    sku = sku.strip() or ('QP-' + uuid.uuid4().hex[:8].upper())
+    if not name.strip() or not weight.strip() or not source.strip():
+        raise BusinessError('请填写商品名称、净含量和资料来源。')
+    output = io.StringIO(newline='')
+    writer = csv.DictWriter(output, COLUMNS)
+    writer.writeheader()
+    locator = '新建商品向导 ' + uuid.uuid4().hex
+    for field, raw in (('product_name', name), ('net_weight_g', weight)):
+        writer.writerow(dict(sku=sku, product_version=version, field_key=field, raw_value=raw,
+                             context_key='general', source_label=source, source_locator=locator,
+                             effective_from=''))
+    result = commit_import(repo, preview_import(output.getvalue().encode('utf-8-sig')), '新建商品向导.csv')
+    if not result['product_ids']:
+        raise BusinessError('商品资料未能保存。')
+    return {**result, 'product_id': result['product_ids'][0], 'sku': sku}
 
 
 def add_manual(repo: Repository, product_id: int, field: str, raw: str, context: str, source_label: str, reason: str, operator: str, effective_from: str = "") -> int:

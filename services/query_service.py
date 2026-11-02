@@ -9,7 +9,22 @@ Row = dict[str, Any]
 
 
 def products(repo: Repository) -> list[Row]:
-    return repo.products()
+    return repo.all("""SELECT p.*,
+        (SELECT f.value FROM fact_revisions f WHERE f.product_id=p.id AND f.field='product_name'
+         AND f.context='general' AND f.state='current' ORDER BY f.id DESC LIMIT 1) AS confirmed_name,
+        (SELECT f.value FROM fact_revisions f WHERE f.product_id=p.id AND f.field='net_weight_g'
+         AND f.context='general' AND f.state='current' ORDER BY f.id DESC LIMIT 1) AS confirmed_weight,
+        (SELECT o.raw FROM observations o WHERE o.product_id=p.id AND o.field='product_name'
+         AND o.context='general' AND o.state='pending' ORDER BY o.id DESC LIMIT 1) AS pending_name
+        FROM product_versions p ORDER BY p.sku,p.version,p.id""")
+
+
+def product_label(product: Row) -> str:
+    name = product.get('confirmed_name') or product.get('pending_name') or '未命名商品'
+    if not product.get('confirmed_name') and product.get('pending_name'):
+        name += '（名称待核对）'
+    weight = f"{product['confirmed_weight']}克" if product.get('confirmed_weight') else '规格待核对'
+    return f"{name} · {weight} · {product['sku']} · {product['version']}"
 
 
 def channels(repo: Repository, product_id: int) -> list[str]:
@@ -21,6 +36,11 @@ def current_facts(repo: Repository, product_id: int) -> list[Row]:
     return repo.all("""SELECT f.*,o.raw,o.source_label,o.source_locator,o.row_no,o.effective_from
         FROM fact_revisions f JOIN observations o ON o.id=f.source_observation_id
         WHERE f.product_id=? AND f.state='current' ORDER BY f.field,f.context""", (product_id,))
+
+
+def has_pending_candidate(repo: Repository, product_id: int, field: str) -> bool:
+    return bool(repo.one("SELECT 1 FROM observations WHERE product_id=? AND field=? AND state='pending' LIMIT 1",
+                         (product_id, field)))
 
 
 def sources(repo: Repository) -> list[Row]:

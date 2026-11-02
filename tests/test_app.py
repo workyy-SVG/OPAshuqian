@@ -12,9 +12,25 @@ def test_empty_app_and_sample_import(tmp_path, monkeypatch):
     app.button(key="import_sample").click().run()
     assert not app.exception
     assert app.selectbox(key="selected_product").value is not None
+    label = app.selectbox(key='selected_product').format_func(app.selectbox(key='selected_product').value)
+    assert '山野辣椒酱' in label and 'P001' in label
     for page in ("数据核对", "内容工作台", "变更追踪", "产品资料"):
         app.radio(key="navigation").set_value(page).run()
         assert not app.exception, page
+
+
+def test_sidebar_new_product_creates_candidates_and_navigates(tmp_path, monkeypatch):
+    monkeypatch.setenv('QIANPIN_RUNTIME_DIR', str(tmp_path))
+    monkeypatch.delenv('QIANPIN_DB_PATH', raising=False)
+    app = AppTest.from_file(str(ROOT/'app.py'), default_timeout=20).run()
+    app.button(key='sidebar_new_product').click().run()
+    next(x for x in app.text_input if x.label == '商品名称').set_value('测试刺梨汁')
+    next(x for x in app.text_input if x.label == '净含量').set_value('200g')
+    next(x for x in app.text_input if x.label == '资料来源').set_value('测试包装')
+    next(x for x in app.button if x.label == '保存并进入数据核对').click().run()
+    assert not app.exception
+    assert app.radio(key='navigation').value == '数据核对'
+    assert '测试刺梨汁' in app.selectbox(key='selected_product').format_func(app.selectbox(key='selected_product').value)
 
 
 def test_ui_generate_submit_and_review(repo, monkeypatch):

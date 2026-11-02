@@ -2,7 +2,7 @@ import csv
 import io
 import streamlit as st
 from config import ROOT, FIELDS
-from services.import_service import preview_import, commit_import, add_manual
+from services.import_service import preview_import, commit_import, add_manual, create_basic_product
 from views.common import action, fact_table, STATES, display_context
 from views.guidance import next_button
 from services import query_service as queries
@@ -11,6 +11,13 @@ from services import query_service as queries
 def render(repo, product_id, operator):
     st.write("先选择一种收集方式；保存后进入待确认候选，人工核对后才用于生成。")
     st.caption('收集来源 → 预览并保存 → 检查候选 → 进入数据核对')
+    if st.session_state.get('focused_new_product', False):
+        render_new_product(repo)
+        return
+    focused_field = st.session_state.get('focused_manual_field')
+    if focused_field and product_id:
+        render_focused_manual(repo, product_id, operator, focused_field)
+        return
     st.subheader('① 收集与保存资料')
     tabs = st.tabs(["公开食品资料", "CSV 导入", "手动补录", "来源与历史"])
     with tabs[1]:
@@ -34,6 +41,9 @@ def render(repo, product_id, operator):
                 preview = preview_import((ROOT / "samples/products.csv").read_bytes())
                 ok, result = action(lambda: commit_import(repo, preview, "拟制演示样例.csv"), "拟制样例已导入，请到数据核对页处理净含量冲突。")
                 if ok:
+                    target = next((p['id'] for p in result['products'] if p['sku']=='P001' and p['version']=='V1'), None)
+                    st.session_state['next_product'] = target or result['product_ids'][0]
+                    st.session_state['pending_navigation'] = '数据核对'
                     st.rerun()
         if upload:
             ok, preview = action_preview(upload.getvalue(), encoding)
@@ -48,9 +58,21 @@ def render(repo, product_id, operator):
                     if st.button("确认导入", type="primary"):
                         ok, result = action(lambda: commit_import(repo, preview, upload.name))
                         if ok:
+                            st.session_state['last_import_products'] = result['products']
                             st.session_state["notice"] = (f"{'已有相同批次，未重复导入。' if result['reused'] else '导入完成。'}"
                                 f"批次 {result['source_id']}：候选 {result['candidates']}，重复 {result['duplicates']}，错误 {result['errors']}。")
                             st.rerun()
+        imported = st.session_state.get('last_import_products', [])
+        if imported:
+            st.markdown('**本批商品 · 选择一个继续核对**')
+            mapping = {p['id']: p for p in imported}
+            chosen = st.selectbox('本批导入商品', list(mapping), format_func=lambda i:
+                                  f"{mapping[i]['sku']} · {mapping[i]['version']} · {mapping[i]['candidate_count']}条候选")
+            if st.button('进入所选商品核对', key='open_imported_product', type='primary'):
+                st.session_state['next_product'] = chosen
+                st.session_state['pending_navigation'] = '数据核对'
+                st.session_state.pop('last_import_products', None)
+                st.rerun()
         st.caption("固定字段：product_name、net_weight_g、price_cent、ingredients_text、usage_text、storage_text。价格原文按元填写。")
     with tabs[2]:
         st.subheader('逐项补充包装或价目表信息')
@@ -155,3 +177,48 @@ def action_preview(data, encoding):
     except BusinessError as exc:
         st.error(str(exc))
         return False, None
+
+
+def render_new_product(repo):
+    st.subheader('新建商品')
+    st.caption('先录入名称、净含量和来源；保存为待确认候选，不会自动成为事实。')
+    with st.form('guided_new_product'):
+        name = st.text_input('商品名称', placeholder='例如：贵州刺梨汁')
+        weight = st.text_input('净含量', placeholder='例如：200g')
+        source = st.text_input('资料来源', placeholder='例如：产品包装标签')
+        with st.expander('高级编号设置（可选）'):
+            sku = st.text_input('SKU（留空自动生成）')
+            version = st.text_input('产品版本', value='V1')
+        submitted = st.form_submit_button('保存并进入数据核对', type='primary')
+    if submitted:
+        ok, result = action(lambda: create_basic_product(repo, name, weight, source, sku, version),
+                            '商品已创建，名称和净含量等待核对。')
+        if ok:
+            st.session_state.pop('focused_new_product', None)
+            st.session_state['next_product'] = result['product_id']
+            st.session_state['pending_navigation'] = '数据核对'
+            st.rerun()
+    if st.button('返回产品资料', key='cancel_new_product'):
+        st.session_state.pop('focused_new_product', None)
+        st.rerun()
+
+
+def render_focused_manual(repo, product_id, operator, field):
+    st.subheader('补录' + FIELDS.get(field, field))
+    st.caption('保存后返回同一商品的数据核对页。')
+    with st.form('focused_manual_entry'):
+        raw = st.text_area('来源原文')
+        context = st.selectbox('价格渠道', ['retail','wholesale'], format_func=display_context) if field=='price_cent' else 'general'
+        source = st.text_input('来源说明', placeholder='例如：产品包装标签')
+        reason = st.text_input('补录原因', value='补齐生成所需资料')
+        submitted = st.form_submit_button('保存并返回核对', type='primary')
+    if submitted:
+        ok, _ = action(lambda: add_manual(repo, product_id, field, raw, context, source, reason, operator))
+        if ok:
+            st.session_state.pop('focused_manual_field', None)
+            st.session_state['next_product'] = product_id
+            st.session_state['pending_navigation'] = '数据核对'
+            st.rerun()
+    if st.button('取消补录', key='cancel_focused_manual'):
+        st.session_state.pop('focused_manual_field', None)
+        st.rerun()

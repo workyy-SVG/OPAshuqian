@@ -8,6 +8,7 @@ from views.access_view import authorize
 from views import product_view, quality_view, content_view, impact_view
 from views.guidance import apply_theme, workspace_header, product_overview
 from services.experience_service import overview
+from services import query_service as queries
 from views.components import notifications
 from views.themes import THEMES, apply_background
 from services.demo_service import public_demo, demo_settings, quota_settings, seed_demo
@@ -58,7 +59,7 @@ with st.sidebar:
     st.divider()
     st.caption(BRAND_NAME)
     st.subheader('当前产品')
-    products = cached_products(str(settings.db_path), database_token(repo), repo)
+    products = queries.products(repo)
     product_map = {p["id"]: p for p in products}
     if products:
         next_product = st.session_state.pop("next_product", None)
@@ -67,10 +68,14 @@ with st.sidebar:
         if st.session_state.get("selected_product") not in product_map:
             st.session_state["selected_product"] = products[0]["id"]
         product_id = st.selectbox("当前产品对象", list(product_map),
-            format_func=lambda i: f"{product_map[i]['sku']} · {product_map[i]['version']}", key="selected_product")
+            format_func=lambda i: queries.product_label(product_map[i]), key="selected_product")
     else:
         product_id = None
         st.info("导入样例或新增一个产品开始。")
+    def open_new_product():
+        st.session_state['focused_new_product'] = True
+        st.session_state['pending_navigation'] = '产品资料'
+    st.button('＋ 新建商品', key='sidebar_new_product', on_click=open_new_product, width='stretch')
     st.divider()
     st.subheader('本次操作')
     if authenticated_user:

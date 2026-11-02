@@ -78,7 +78,17 @@ def render(repo, product_id, operator, quota_repo=None, session_id=None):
         disabled = (not basis or bool(basis["missing"]) or
                     (mode != "template" and (not live_models_enabled() or not cfg.api_key or quota_exhausted)))
         if basis and basis['missing']:
-            next_button('去补齐或核对资料', '数据核对', 'content:quality')
+            st.caption('有候选时去核对；完全没有候选时可直接补录。')
+            for field in basis['missing']:
+                pending = queries.has_pending_candidate(repo, product_id, field)
+                if pending:
+                    next_button('去核对' + FIELDS[field], '数据核对', 'content:quality:'+field)
+                else:
+                    def fill_missing(target=field):
+                        st.session_state['focused_manual_field'] = target
+                        st.session_state['next_product'] = product_id
+                        st.session_state['pending_navigation'] = '产品资料'
+                    st.button('补录' + FIELDS[field], key='content:fill:'+field, on_click=fill_missing)
         if st.button("生成一份草稿", type="primary", disabled=disabled, key="generate_draft"):
             request_key = uuid.uuid4().hex
             st.session_state["last_request_key"] = request_key

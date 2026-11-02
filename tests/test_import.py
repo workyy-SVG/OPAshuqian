@@ -20,6 +20,8 @@ def test_import_idempotent_and_errors(repo):
     result = commit_import(repo, preview, "../../evil.csv")
     assert result["errors"] == 2
     assert result["duplicates"] == 1
+    assert {p['sku'] for p in result['products']} == {'P001', 'P002'}
+    assert result['product_ids'] == [p['id'] for p in result['products']]
     count = len(repo.all("SELECT * FROM observations"))
     assert commit_import(repo, preview)["reused"]
     assert len(repo.all("SELECT * FROM observations")) == count

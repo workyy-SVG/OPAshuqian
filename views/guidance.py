@@ -74,7 +74,11 @@ def apply_theme():
 
 def workspace_header(page, product=None, progress=None):
     module = MODULES[page]
-    context = f"{product['sku']} / {product['version']}" if product else '从导入第一份资料开始'
+    if product:
+        from services.query_service import product_label
+        context = product_label(product)
+    else:
+        context = '从导入第一份资料开始'
     st.markdown(f'''<section class="qp-hero"><div class="qp-eyebrow">黔品智营 / {module['tag']} / {module['number']}</div>
         <h1>{page}</h1><p>{module['summary']}</p><span class="qp-context">{escape(context)}</span></section>''', unsafe_allow_html=True)
     goals = {'产品资料':('收集有来源的资料，保存为待确认候选','数据核对'),
@@ -110,6 +114,7 @@ def workspace_header(page, product=None, progress=None):
 def product_overview(progress):
     from views.components import status_badge, glossary
     st.caption('当前产品概览 · 生成必需资料为名称与净含量；价格按需要核对对应渠道。')
+    st.markdown('**当前业务状态：' + progress['stage'] + '**')
     cols = st.columns(4)
     cols[0].metric('必需资料已确认', f"{progress['confirmed']}/2")
     cols[1].metric('冲突字段', progress['conflicts'])

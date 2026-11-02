@@ -68,7 +68,17 @@ def render_work(repo, product_id, operator):
                          x='字段', y='不同候选值', color='#a16207', horizontal=True)
     for issue in issues:
         if issue["type"] == "missing":
-            st.warning(f"请先核对并确认{FIELDS[issue['field']]}；没有候选时，回产品资料页补录来源。")
+            has_candidates = any(i.get('field') == issue['field'] and i.get('observations') for i in issues)
+            if has_candidates:
+                st.warning(f"{FIELDS[issue['field']]}已有候选，请在下方核对并确认。")
+            else:
+                st.warning(f"{FIELDS[issue['field']]}没有候选资料，请先补录可靠来源。")
+                def open_missing(field=issue['field']):
+                    st.session_state['focused_manual_field'] = field
+                    st.session_state['next_product'] = product_id
+                    st.session_state['pending_navigation'] = '产品资料'
+                st.button('补录' + FIELDS[issue['field']], key='fill_missing:'+issue['field'],
+                          on_click=open_missing)
     groups = [i for i in issues if "observations" in i]
     if not groups:
         st.success("当前没有待处理候选。")

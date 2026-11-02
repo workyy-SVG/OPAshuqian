@@ -12,6 +12,7 @@ def test_overview_tracks_confirmed_data_without_adopting(repo):
     p = repo.products()[0]['id']
     data = overview(repo, p)
     assert data['confirmed'] == 0 and data['pending'] > 0
+    assert data['stage'] == '缺资料'
     assert data['steps'] == [True, False, False, False]
     assert not repo.all('SELECT * FROM fact_revisions')
 
@@ -38,13 +39,29 @@ def test_sample_import_is_explicit_and_never_confirms(tmp_path, monkeypatch):
     app = AppTest.from_file(str(ROOT/'app.py'), default_timeout=20).run()
     assert not any((b.key or '').startswith('welcome_') for b in app.button)
     app.button(key='import_sample').click().run()
-    app.button(key='step:数据核对').click().run()
     assert not app.exception
     assert app.radio(key='navigation').value == '数据核对'
+    assert 'P001' in app.selectbox(key='selected_product').format_func(app.selectbox(key='selected_product').value)
     from repository import Repository
     from config import Settings
     repo = Repository(Settings(tmp_path,tmp_path/'qianpin.sqlite3'))
     assert repo.products() and not repo.all('SELECT * FROM fact_revisions')
+
+
+def test_missing_field_opens_focused_manual_form(tmp_path, monkeypatch):
+    from repository import Repository
+    from config import Settings
+    monkeypatch.setenv('QIANPIN_RUNTIME_DIR', str(tmp_path))
+    monkeypatch.delenv('QIANPIN_DB_PATH', raising=False)
+    repo = Repository(Settings(tmp_path, tmp_path/'qianpin.sqlite3'))
+    repo.initialize()
+    repo.add_product('EMPTY', 'V1')
+    app = AppTest.from_file(str(ROOT/'app.py'), default_timeout=20).run()
+    app.radio(key='navigation').set_value('数据核对').run()
+    app.button(key='fill_missing:product_name').click().run()
+    assert not app.exception
+    assert app.radio(key='navigation').value == '产品资料'
+    assert any(x.label == '来源原文' for x in app.text_area)
 
 
 def test_candidate_card_requires_explicit_exclusion_acknowledgement(tmp_path, monkeypatch):
